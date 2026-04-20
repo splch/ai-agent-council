@@ -13,7 +13,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "litellm>=1.53",
+    "litellm>=1.76",
     "pydantic>=2.9",
     "pyyaml>=6.0.2",
     "typer>=0.14",
@@ -90,7 +90,7 @@ markers = [
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    "pytest-asyncio>=0.24",
+    "pytest-asyncio>=1.0",
     "ruff>=0.8",
-    "ty>=0.0.1a0",
+    "ty>=0.0.31,<0.1",
 ]

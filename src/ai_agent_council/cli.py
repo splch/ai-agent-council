@@ -97,16 +97,6 @@ class TokenPrinter:
         self._current = None
 
 
-def _resolve_template(name: str) -> Path:
-    if name not in AVAILABLE_TEMPLATES:
-        raise typer.BadParameter(
-            f"unknown template {name!r}; available: {', '.join(AVAILABLE_TEMPLATES)}"
-        )
-    resource = resources.files(_TEMPLATE_PACKAGE).joinpath(f"{name}.yaml")
-    with resources.as_file(resource) as path:
-        return Path(path)
-
-
 @app.command()
 def run(
     task: Annotated[str, typer.Argument(help="Commander's Intent — what you want.")],
@@ -171,12 +161,19 @@ def init(
     ] = False,
 ) -> None:
     """Scaffold a starter council config from a shipped template."""
-    src = _resolve_template(template)
+    if template not in AVAILABLE_TEMPLATES:
+        raise typer.BadParameter(
+            f"unknown template {template!r}; available: {', '.join(AVAILABLE_TEMPLATES)}"
+        )
     if path.exists() and not force:
         _err.print(f"[red]{path} already exists; use --force to overwrite[/red]")
         raise typer.Exit(code=1)
     path.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, path)
+    # Keep the copy inside the as_file context: on zipimport-installed packages,
+    # as_file materializes a temp file that's deleted on context exit.
+    resource = resources.files(_TEMPLATE_PACKAGE).joinpath(f"{template}.yaml")
+    with resources.as_file(resource) as src:
+        shutil.copyfile(src, path)
     _err.print(f"[green]wrote {path} from template {template!r}[/green]")
 
 
@@ -200,8 +197,8 @@ def validate(
         )
 
 
-@app.command()
-def eval(
+@app.command(name="eval")
+def eval_command(
     config: Annotated[
         Path, typer.Option("--config", "-c", help="Council YAML.", exists=True, readable=True)
     ],
