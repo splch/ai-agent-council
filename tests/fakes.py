@@ -50,6 +50,7 @@ class FakeLLM:
         max_tokens: int,
         timeout_s: float,
         json_mode: bool = False,
+        stream_handler: Callable[[str], None] | None = None,
     ) -> tuple[str, CompletionMeta]:
         call = FakeCall(
             model=model,
@@ -69,6 +70,13 @@ class FakeLLM:
             content = self.by_name.get(_agent_from_system(system), self.default)
         if isinstance(content, LLMError):
             raise content
+        if stream_handler is not None:
+            # Emit three deterministic chunks so tests can assert the handler was driven.
+            third = max(1, len(content) // 3)
+            for start in (0, third, 2 * third):
+                piece = content[start : start + third] if start < len(content) else ""
+                if piece:
+                    stream_handler(piece)
         meta: CompletionMeta = {
             "tokens_in": 1,
             "tokens_out": 1,

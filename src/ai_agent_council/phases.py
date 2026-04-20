@@ -9,8 +9,10 @@ asserts no diverger's prompt contains any other diverger's output.
 
 import asyncio
 import time
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from .llm import StreamHandler
 from .models import Phase, PhaseOutput, Role
 from .prompts import (
     render_critique_prompt,
@@ -23,6 +25,17 @@ from .prompts import (
 if TYPE_CHECKING:
     from .agent import Agent
     from .council import Council
+
+
+# Callback signature: (agent_name, content_chunk) → None. Invoked once per streamed delta.
+TokenStream = Callable[[str, str], None]
+
+
+def _handler_for(ts: TokenStream | None, agent_name: str) -> StreamHandler | None:
+    """Wrap a TokenStream so it looks like a per-agent StreamHandler."""
+    if ts is None:
+        return None
+    return lambda chunk: ts(agent_name, chunk)
 
 
 def _elapsed_ms(t0: float) -> int:
@@ -45,7 +58,9 @@ async def _gather_messages(coros: list) -> list:
     return [t.result() for t in tasks]
 
 
-async def run_divergent(council: Council, task: str) -> PhaseOutput:
+async def run_divergent(
+    council: Council, task: str, *, tokens: TokenStream | None = None
+) -> PhaseOutput:
     """Divergent phase. Each agent receives the same isolated prompt — no peer output."""
     divergers = _select_divergers(council)
     # The prompt builder signature takes only `task`. Peer drafts are structurally
@@ -54,24 +69,51 @@ async def run_divergent(council: Council, task: str) -> PhaseOutput:
 
     t0 = time.monotonic()
     messages = await _gather_messages(
-        [a.respond(user_prompt, phase=Phase.DIVERGENT) for a in divergers]
+        [
+            a.respond(
+                user_prompt,
+                phase=Phase.DIVERGENT,
+                stream_handler=_handler_for(tokens, a.config.name),
+            )
+            for a in divergers
+        ]
     )
     return PhaseOutput(phase=Phase.DIVERGENT, messages=messages, elapsed_ms=_elapsed_ms(t0))
 
 
-async def run_critique(council: Council, task: str, diverge: PhaseOutput) -> PhaseOutput:
+async def run_critique(
+    council: Council,
+    task: str,
+    diverge: PhaseOutput,
+    *,
+    tokens: TokenStream | None = None,
+) -> PhaseOutput:
     """Critique phase. Critic + Reasoner review all divergent drafts. Pixar rule applies."""
     reviewers = council.by_role.get(Role.CRITIC, []) + council.by_role.get(Role.REASONER, [])
     if not reviewers:
         return PhaseOutput(phase=Phase.CRITIQUE, messages=[], elapsed_ms=0)
     prompt = render_critique_prompt(task, diverge.messages)
     t0 = time.monotonic()
-    messages = await _gather_messages([a.respond(prompt, phase=Phase.CRITIQUE) for a in reviewers])
+    messages = await _gather_messages(
+        [
+            a.respond(
+                prompt,
+                phase=Phase.CRITIQUE,
+                stream_handler=_handler_for(tokens, a.config.name),
+            )
+            for a in reviewers
+        ]
+    )
     return PhaseOutput(phase=Phase.CRITIQUE, messages=messages, elapsed_ms=_elapsed_ms(t0))
 
 
 async def run_synthesis(
-    council: Council, task: str, diverge: PhaseOutput, critique: PhaseOutput
+    council: Council,
+    task: str,
+    diverge: PhaseOutput,
+    critique: PhaseOutput,
+    *,
+    tokens: TokenStream | None = None,
 ) -> PhaseOutput:
     """Synthesis phase. Each original drafter sees critiques, revises. Drafters are
     explicitly permitted to disagree with any critique point (system prompt says so)."""
@@ -80,6 +122,7 @@ async def run_synthesis(
         agent.respond(
             render_synthesis_prompt(task, original, critique.messages),
             phase=Phase.SYNTHESIS,
+            stream_handler=_handler_for(tokens, agent.config.name),
         )
         for original in diverge.messages
         if (agent := council.agents.get(original.agent_name)) is not None
@@ -88,24 +131,42 @@ async def run_synthesis(
     return PhaseOutput(phase=Phase.SYNTHESIS, messages=messages, elapsed_ms=_elapsed_ms(t0))
 
 
-async def run_finishing(council: Council, task: str, synthesis: PhaseOutput) -> PhaseOutput:
+async def run_finishing(
+    council: Council,
+    task: str,
+    synthesis: PhaseOutput,
+    *,
+    tokens: TokenStream | None = None,
+) -> PhaseOutput:
     """Finishing phase (skipped if no Finisher rostered)."""
     finishers = council.by_role.get(Role.FINISHER, [])
     if not finishers:
         return PhaseOutput(phase=Phase.FINISHING, messages=[], elapsed_ms=0)
     prompt = render_finishing_prompt(task, synthesis.messages)
     t0 = time.monotonic()
-    msg = await finishers[0].respond(prompt, phase=Phase.FINISHING)
+    msg = await finishers[0].respond(
+        prompt,
+        phase=Phase.FINISHING,
+        stream_handler=_handler_for(tokens, finishers[0].config.name),
+    )
     return PhaseOutput(phase=Phase.FINISHING, messages=[msg], elapsed_ms=_elapsed_ms(t0))
 
 
 async def run_orchestrate(
-    council: Council, task: str, phases_so_far: list[PhaseOutput]
+    council: Council,
+    task: str,
+    phases_so_far: list[PhaseOutput],
+    *,
+    tokens: TokenStream | None = None,
 ) -> PhaseOutput:
     """Orchestration. Thin — integrates transcript into final answer, no new content."""
     # Validator guarantees exactly one orchestrator is present.
     orchestrator = council.by_role[Role.ORCHESTRATOR][0]
     prompt = render_orchestrate_prompt(task, list(phases_so_far))
     t0 = time.monotonic()
-    msg = await orchestrator.respond(prompt, phase=Phase.ORCHESTRATE)
+    msg = await orchestrator.respond(
+        prompt,
+        phase=Phase.ORCHESTRATE,
+        stream_handler=_handler_for(tokens, orchestrator.config.name),
+    )
     return PhaseOutput(phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=_elapsed_ms(t0))

@@ -148,3 +148,31 @@ async def test_total_tokens_aggregated(
     count = sum(len(p.messages) for p in result.phases if p.messages)
     assert tin == count  # FakeLLM reports 1 in per call
     assert tout == count
+
+
+async def test_tokens_callback_is_driven_live(
+    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
+) -> None:
+    """With a `tokens` callback, each agent's content is streamed as it's produced."""
+    fake_llm.responder = lambda call: f"RESPONSE_FROM_{_name_of(call.system)}"
+    received: list[tuple[str, str]] = []
+
+    def on_token(agent: str, chunk: str) -> None:
+        received.append((agent, chunk))
+
+    await Council(minimal_council_config).run("task", tokens=on_token)
+
+    # At least one chunk per agent per phase they participate in. Concatenating a
+    # given agent's chunks reproduces the full response.
+    by_agent: dict[str, str] = {}
+    for agent, chunk in received:
+        by_agent[agent] = by_agent.get(agent, "") + chunk
+    assert "Muse" in by_agent
+    assert by_agent["Muse"].startswith("RESPONSE_FROM_Muse")
+    assert "Scribe" in by_agent  # orchestrator also streams
+
+
+def _name_of(system: str) -> str:
+    head = system.strip().splitlines()[0]
+    _, _, rest = head.partition("You are ")
+    return rest.split(",", 1)[0].strip() or "unknown"

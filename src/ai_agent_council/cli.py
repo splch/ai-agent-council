@@ -38,15 +38,23 @@ AVAILABLE_TEMPLATES = (
 
 
 class RichPhasePrinter:
-    """Stream each PhaseOutput to stderr as it completes."""
+    """Stream each PhaseOutput to stderr as it completes.
 
-    def __init__(self, *, quiet: bool) -> None:
+    When `streaming=True`, per-message Panel output is suppressed — tokens are flowing
+    to stderr live via `TokenPrinter`, so a redundant post-hoc panel would just clutter.
+    Phase headings still print.
+    """
+
+    def __init__(self, *, quiet: bool, streaming: bool) -> None:
         self.quiet = quiet
+        self.streaming = streaming
 
     def __call__(self, phase: PhaseOutput) -> None:
         if self.quiet:
             return
         _err.print(Rule(f"[bold]{phase.phase.value.upper()}[/bold] ({phase.elapsed_ms} ms)"))
+        if self.streaming:
+            return
         if not phase.messages:
             _err.print("[dim](no participants for this phase)[/dim]")
             return
@@ -64,6 +72,29 @@ class RichPhasePrinter:
             _err.print(Rule("[bold green]FINAL ANSWER[/bold green]"))
         # Stdout, plain text: pipes and redirection Just Work.
         print(final_answer)
+
+
+class TokenPrinter:
+    """Emit live token chunks to stderr, prefixed with the agent name once per turn."""
+
+    def __init__(self) -> None:
+        self._current: str | None = None
+
+    def __call__(self, agent_name: str, chunk: str) -> None:
+        if agent_name != self._current:
+            # Start a new agent turn — newline + bold header, then tokens on the same line.
+            if self._current is not None:
+                sys.stderr.write("\n")
+            sys.stderr.write(f"\x1b[1m[{agent_name}]\x1b[0m ")
+            self._current = agent_name
+        sys.stderr.write(chunk)
+        sys.stderr.flush()
+
+    def reset(self) -> None:
+        if self._current is not None:
+            sys.stderr.write("\n")
+            sys.stderr.flush()
+        self._current = None
 
 
 def _resolve_template(name: str) -> Path:
@@ -91,6 +122,14 @@ def run(
         bool,
         typer.Option("--quiet", "-q", help="Suppress streaming phase output."),
     ] = False,
+    stream: Annotated[
+        bool,
+        typer.Option(
+            "--stream",
+            "-s",
+            help="Stream tokens to stderr live. Implies no per-message panels.",
+        ),
+    ] = False,
 ) -> None:
     """Run the council on a task."""
     try:
@@ -100,9 +139,14 @@ def run(
         raise typer.Exit(code=2) from e
 
     council = Council(cfg)
-    printer = RichPhasePrinter(quiet=quiet)
-    result = asyncio.run(council.run(task, stream=printer))
-    printer.final(result.final_answer)
+    phase_printer = RichPhasePrinter(quiet=quiet, streaming=stream)
+    token_printer = TokenPrinter() if (stream and not quiet) else None
+    result = asyncio.run(
+        council.run(task, stream=phase_printer, tokens=token_printer)
+    )
+    if token_printer is not None:
+        token_printer.reset()
+    phase_printer.final(result.final_answer)
     tin, tout = result.total_tokens
     _err.print(
         f"[dim]tokens: {tin} in / {tout} out · cost: ${result.total_cost_usd:.4f}[/dim]"

@@ -6,6 +6,7 @@ from typing import Self
 from . import llm
 from .config import AgentConfig
 from .exceptions import LLMError
+from .llm import StreamHandler
 from .models import Message, Phase
 from .prompts import render_role_prompt
 
@@ -28,7 +29,13 @@ class Agent:
         prompt = cfg.system_prompt if cfg.system_prompt else render_role_prompt(cfg.role, cfg.name)
         return cls(config=cfg, system_prompt=prompt)
 
-    async def respond(self, user_prompt: str, *, phase: Phase) -> Message:
+    async def respond(
+        self,
+        user_prompt: str,
+        *,
+        phase: Phase,
+        stream_handler: StreamHandler | None = None,
+    ) -> Message:
         cfg = self.config
         try:
             content, meta = await llm.complete(
@@ -39,6 +46,7 @@ class Agent:
                 max_tokens=cfg.max_tokens,
                 timeout_s=cfg.timeout_s,
                 json_mode=cfg.json_mode,
+                stream_handler=stream_handler,
             )
             return Message(
                 role=cfg.role,

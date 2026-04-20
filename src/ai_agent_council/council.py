@@ -11,6 +11,7 @@ from . import phases as phases_mod
 from .agent import Agent
 from .config import CouncilConfig, hash_config, load_council_config
 from .models import CouncilResult, PhaseOutput, Role
+from .phases import TokenStream
 
 PhaseStream = Callable[[PhaseOutput], None]
 
@@ -31,33 +32,45 @@ class Council:
     def from_yaml(cls, path: Path | str) -> Self:
         return cls(load_council_config(path))
 
-    async def run(self, task: str, *, stream: PhaseStream | None = None) -> CouncilResult:
+    async def run(
+        self,
+        task: str,
+        *,
+        stream: PhaseStream | None = None,
+        tokens: TokenStream | None = None,
+    ) -> CouncilResult:
         """Run the council end-to-end on `task`.
 
         Phase order: divergent → critique → synthesis → [finishing] → orchestrate.
         Each completed phase is passed to `stream` if given, before the next begins.
+        Each token chunk is passed to `tokens(agent_name, chunk)` as it arrives, for
+        callers that want to render live token streams.
         """
         started = datetime.now(UTC)
         phases_run: list[PhaseOutput] = []
 
-        divergent = await phases_mod.run_divergent(self, task)
+        divergent = await phases_mod.run_divergent(self, task, tokens=tokens)
         _emit(stream, divergent)
         phases_run.append(divergent)
 
-        critique = await phases_mod.run_critique(self, task, divergent)
+        critique = await phases_mod.run_critique(self, task, divergent, tokens=tokens)
         _emit(stream, critique)
         phases_run.append(critique)
 
-        synthesis = await phases_mod.run_synthesis(self, task, divergent, critique)
+        synthesis = await phases_mod.run_synthesis(
+            self, task, divergent, critique, tokens=tokens
+        )
         _emit(stream, synthesis)
         phases_run.append(synthesis)
 
         if Role.FINISHER in self.by_role:
-            finishing = await phases_mod.run_finishing(self, task, synthesis)
+            finishing = await phases_mod.run_finishing(self, task, synthesis, tokens=tokens)
             _emit(stream, finishing)
             phases_run.append(finishing)
 
-        orchestration = await phases_mod.run_orchestrate(self, task, phases_run)
+        orchestration = await phases_mod.run_orchestrate(
+            self, task, phases_run, tokens=tokens
+        )
         _emit(stream, orchestration)
         phases_run.append(orchestration)
 
