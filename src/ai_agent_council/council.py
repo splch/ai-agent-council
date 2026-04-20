@@ -100,8 +100,22 @@ class Council:
         _emit(stream, synthesis)
         phases_run.append(synthesis)
 
+        # Optional Mixture-of-Agents layer-2: each drafter sees all peers' revisions
+        # and produces a final integration. The resulting messages replace synthesis
+        # for downstream phases.
+        synthesis_for_downstream = synthesis
+        if self.config.layered and synthesis.messages:
+            cross = await phases_mod.run_cross_synthesis(
+                self, task, synthesis, tokens=tokens
+            )
+            _emit(stream, cross)
+            phases_run.append(cross)
+            synthesis_for_downstream = cross
+
         if Role.FINISHER in self.by_role:
-            finishing = await phases_mod.run_finishing(self, task, synthesis, tokens=tokens)
+            finishing = await phases_mod.run_finishing(
+                self, task, synthesis_for_downstream, tokens=tokens
+            )
             _emit(stream, finishing)
             phases_run.append(finishing)
 

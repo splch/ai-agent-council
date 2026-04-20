@@ -113,6 +113,13 @@ class CouncilConfig(BaseModel):
     # proposal acceptable. Set 0 (default) to disable. The research maps this
     # to the "if >70% agree too early, force steelman" dissent quota.
     min_dissent: float = Field(default=0.0, ge=0.0, le=1.0)
+    # When true, enable a Mixture-of-Agents-style cross-synthesis pass: after the
+    # standard synthesis phase, each drafter sees ALL peers' revised drafts (not
+    # just their own original + critiques) and produces a second revision. The
+    # research pattern: "each layer's output feeds the next layer, final
+    # aggregator synthesizes." One extra round of LLM calls per drafter; off by
+    # default because the cost-benefit is task-dependent.
+    layered: bool = False
 
     @model_validator(mode="after")
     def _validate_roster(self) -> Self:

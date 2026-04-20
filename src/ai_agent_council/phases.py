@@ -16,6 +16,7 @@ from .llm import StreamHandler
 from .models import Message, Phase, PhaseOutput, Role
 from .prompts import (
     render_critique_prompt,
+    render_cross_synthesis_prompt,
     render_divergent_prompt,
     render_finishing_prompt,
     render_orchestrate_prompt,
@@ -216,6 +217,37 @@ async def run_synthesis(
     messages = await _run_concurrently(coros)
     return PhaseOutput(
         phase=Phase.SYNTHESIS,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
+
+
+async def run_cross_synthesis(
+    council: Council,
+    task: str,
+    synthesis: PhaseOutput,
+    *,
+    tokens: TokenStream | None = None,
+) -> PhaseOutput:
+    """Cross-synthesis (Mixture-of-Agents layer-2): each drafter sees all peers'
+    revised drafts and produces a final integration. Opt-in via `CouncilConfig.layered`.
+    """
+    t0 = time.monotonic()
+    coros = []
+    for own in synthesis.messages:
+        agent = council.agents.get(own.agent_name)
+        if agent is None:
+            continue
+        coros.append(
+            agent.respond(
+                render_cross_synthesis_prompt(task, own, synthesis.messages),
+                phase=Phase.CROSS_SYNTHESIS,
+                stream_handler=_handler_for(tokens, agent.config.name),
+            )
+        )
+    messages = await _run_concurrently(coros)
+    return PhaseOutput(
+        phase=Phase.CROSS_SYNTHESIS,
         messages=messages,
         elapsed_ms=int((time.monotonic() - t0) * 1000),
     )

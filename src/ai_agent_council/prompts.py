@@ -425,6 +425,51 @@ def render_synthesis_prompt(
     return "\n".join(parts)
 
 
+def render_cross_synthesis_prompt(
+    task: str,
+    own_synthesis: Message,
+    peer_syntheses: list[Message],
+) -> str:
+    """Build the cross-synthesis prompt — a Mixture-of-Agents layer-2 revision.
+
+    Each drafter sees ALL peers' synthesized drafts (including their own) and produces
+    a final revised version that integrates what's strongest across them. This is the
+    "each layer's output feeds the next layer" pattern from the MoA research.
+    """
+    parts: list[str] = [
+        "Commander's Intent (the task):",
+        task.strip(),
+        "",
+        "Your own revised draft from the synthesis phase:",
+        "---",
+        own_synthesis.content.strip() or "(empty)",
+        "---",
+        "",
+        "Your peers' revised drafts (they saw the same critiques you did; these are their "
+        "independent revisions):",
+    ]
+    for p in peer_syntheses:
+        if p.agent_name == own_synthesis.agent_name:
+            continue
+        if p.error:
+            parts.append(f"[{p.agent_name} revision FAILED: {p.error}]")
+        else:
+            parts.append(f"--- From {p.agent_name} ---")
+            parts.append(p.content.strip() or "(empty)")
+    parts.extend(
+        [
+            "",
+            "Produce a FINAL revision that takes the strongest elements across all drafts. "
+            "You are not voting or averaging — you are synthesizing. Where peers made a "
+            "point you missed, incorporate it. Where your original framing is stronger, "
+            "defend it. The persistent-stance clause still applies: change position only "
+            "on new evidence or specific flaws, not on social pressure or eloquence. "
+            "Output the final revision only.",
+        ]
+    )
+    return "\n".join(parts)
+
+
 def render_finishing_prompt(task: str, synthesis_messages: list[Message]) -> str:
     """Build the finishing-phase prompt."""
     parts: list[str] = [

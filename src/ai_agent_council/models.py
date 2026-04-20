@@ -25,6 +25,7 @@ class Phase(StrEnum):
     CRITIQUE = "critique"
     STEELMAN = "steelman"
     SYNTHESIS = "synthesis"
+    CROSS_SYNTHESIS = "cross_synthesis"
     FINISHING = "finishing"
     ORCHESTRATE = "orchestrate"
     RETROSPECTIVE = "retrospective"
