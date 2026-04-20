@@ -103,6 +103,10 @@ def run(
     printer = RichPhasePrinter(quiet=quiet)
     result = asyncio.run(council.run(task, stream=printer))
     printer.final(result.final_answer)
+    tin, tout = result.total_tokens
+    _err.print(
+        f"[dim]tokens: {tin} in / {tout} out · cost: ${result.total_cost_usd:.4f}[/dim]"
+    )
     if transcript is not None:
         written = write_transcript(result, transcript)
         _err.print(f"[dim]transcript: {written}[/dim]")

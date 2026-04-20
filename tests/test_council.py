@@ -1,5 +1,7 @@
 """End-to-end council runs with FakeLLM."""
 
+import pytest
+
 from ai_agent_council.config import CouncilConfig
 from ai_agent_council.council import Council, run_council
 from ai_agent_council.models import Phase, PhaseOutput
@@ -110,3 +112,39 @@ async def test_agent_error_captured_in_transcript(
     muse_messages = [m for ph in result.phases for m in ph.messages if m.agent_name == "Muse"]
     assert any(m.error for m in muse_messages)
     assert result.final_answer  # orchestrator still produced an answer
+
+
+async def test_total_cost_sums_per_message_cost(
+    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
+) -> None:
+    """total_cost_usd aggregates cost_usd across all phase messages."""
+    fake_llm.default = "x"
+    fake_llm.cost_per_call = 0.01
+    result = await Council(minimal_council_config).run("task")
+    call_count = sum(len(p.messages) for p in result.phases)
+    assert call_count > 0
+    assert result.total_cost_usd == pytest.approx(0.01 * call_count)
+
+
+async def test_failed_messages_contribute_zero_cost(
+    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
+) -> None:
+    fake_llm.raise_for = {"ollama/gemma3:2b"}  # Muse fails → cost_usd is None
+    fake_llm.default = "ok"
+    fake_llm.cost_per_call = 0.005
+    result = await Council(minimal_council_config).run("task")
+    muse_msgs = [m for ph in result.phases for m in ph.messages if m.agent_name == "Muse"]
+    assert all(m.cost_usd is None for m in muse_msgs)
+    # total is finite and non-negative
+    assert result.total_cost_usd > 0
+
+
+async def test_total_tokens_aggregated(
+    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
+) -> None:
+    fake_llm.default = "x"
+    result = await Council(minimal_council_config).run("task")
+    tin, tout = result.total_tokens
+    count = sum(len(p.messages) for p in result.phases if p.messages)
+    assert tin == count  # FakeLLM reports 1 in per call
+    assert tout == count

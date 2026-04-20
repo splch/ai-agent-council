@@ -38,6 +38,7 @@ class FakeLLM:
     default: str = "fake response"
     calls: list[FakeCall] = field(default_factory=list)
     raise_for: set[str] = field(default_factory=set)
+    cost_per_call: float = 0.0001
 
     async def complete(
         self,
@@ -68,7 +69,12 @@ class FakeLLM:
             content = self.by_name.get(_agent_from_system(system), self.default)
         if isinstance(content, LLMError):
             raise content
-        meta: CompletionMeta = {"tokens_in": 1, "tokens_out": 1, "latency_ms": 1}
+        meta: CompletionMeta = {
+            "tokens_in": 1,
+            "tokens_out": 1,
+            "latency_ms": 1,
+            "cost_usd": self.cost_per_call,
+        }
         return content, meta
 
 

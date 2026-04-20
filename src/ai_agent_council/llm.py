@@ -17,7 +17,18 @@ from tenacity import (
 
 from .exceptions import LLMError, LLMRateLimitError, LLMTimeoutError
 
-CompletionMeta = dict[str, int | None]
+# Meta bag returned alongside each completion. Keys: tokens_in, tokens_out (int | None),
+# latency_ms (int), cost_usd (float — zero for models LiteLLM doesn't price, e.g. Ollama).
+CompletionMeta = dict[str, Any]
+
+
+def _completion_cost(resp: Any) -> float:
+    """Best-effort cost for a completion response in USD. LiteLLM's completion_cost is
+    lossy (unknown models → 0); we swallow its exceptions for the same reason."""
+    try:
+        return float(litellm.completion_cost(completion_response=resp) or 0.0)
+    except Exception:
+        return 0.0
 
 
 @retry(
@@ -79,5 +90,6 @@ async def complete(
         "tokens_in": getattr(usage, "prompt_tokens", None) if usage else None,
         "tokens_out": getattr(usage, "completion_tokens", None) if usage else None,
         "latency_ms": latency_ms,
+        "cost_usd": _completion_cost(resp),
     }
     return content, meta

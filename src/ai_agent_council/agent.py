@@ -50,6 +50,7 @@ class Agent:
                 tokens_in=meta.get("tokens_in"),
                 tokens_out=meta.get("tokens_out"),
                 latency_ms=meta.get("latency_ms"),
+                cost_usd=meta.get("cost_usd"),
             )
         except LLMError as e:
             return Message(

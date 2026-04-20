@@ -25,10 +25,22 @@ class Phase(StrEnum):
     SYNTHESIS = "synthesis"
     FINISHING = "finishing"
     ORCHESTRATE = "orchestrate"
+    RETROSPECTIVE = "retrospective"
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class ToolCall(BaseModel):
+    """A single tool invocation made during an agent's turn."""
+
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    arguments: dict[str, object]
+    result: str
+    error: str | None = None
 
 
 class Message(BaseModel):
@@ -45,6 +57,8 @@ class Message(BaseModel):
     tokens_in: int | None = None
     tokens_out: int | None = None
     latency_ms: int | None = None
+    cost_usd: float | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime = Field(default_factory=_utcnow)
 
@@ -70,3 +84,18 @@ class CouncilResult(BaseModel):
     config_digest: str
     started_at: datetime
     finished_at: datetime
+
+    @property
+    def total_cost_usd(self) -> float:
+        """Sum of per-message cost across the whole run (USD). Zero for models LiteLLM
+        doesn't price (e.g. local Ollama)."""
+        return sum(
+            (m.cost_usd or 0.0) for ph in self.phases for m in ph.messages
+        )
+
+    @property
+    def total_tokens(self) -> tuple[int, int]:
+        """(tokens_in, tokens_out) summed across the run. Unknowns count as zero."""
+        tin = sum((m.tokens_in or 0) for ph in self.phases for m in ph.messages)
+        tout = sum((m.tokens_out or 0) for ph in self.phases for m in ph.messages)
+        return tin, tout
