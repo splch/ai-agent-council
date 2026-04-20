@@ -37,6 +37,22 @@ def _completion_cost(resp: Any) -> float:
         return 0.0
 
 
+def _wrap_litellm_error(e: Exception) -> LLMError:
+    """Translate a litellm-layer exception into our LLMError hierarchy.
+
+    The specific subclasses (Timeout, RateLimit) drive tenacity retry — everything else
+    (APIError, APIConnectionError, AuthenticationError, BadRequestError, …) is a terminal
+    LLMError that Agent.respond captures into `Message.error`. `asyncio.CancelledError`
+    is a BaseException, so it isn't caught by the `except Exception` at the call site —
+    cooperative cancellation still propagates.
+    """
+    if isinstance(e, litellm.exceptions.Timeout):
+        return LLMTimeoutError(str(e))
+    if isinstance(e, litellm.exceptions.RateLimitError):
+        return LLMRateLimitError(str(e))
+    return LLMError(f"{type(e).__name__}: {e}")
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential_jitter(initial=1.0, max=10.0),
@@ -67,11 +83,11 @@ async def complete(
     tool invocations, which are executed locally and fed back for up to
     `max_tool_iterations` rounds before the final content is returned. Streaming is not
     combined with tool-calling in this release — if both are requested, tool-calling wins
+    and the stream_handler is ignored.
 
     Retry note: the @retry wraps the *whole* function, so a timeout in round 3 of a tool
     loop restarts the loop from round 0. That's arguably the right semantics (the
     provider's conversation state is gone) but it re-pays the cost of earlier rounds.
-    and the stream_handler is ignored.
 
     Raises `LLMError` (or subclass) on failure. Retries timeouts and rate-limits with
     exponential-jitter backoff; surface other errors immediately.
@@ -99,14 +115,8 @@ async def complete(
     t0 = time.monotonic()
     try:
         resp = await litellm.acompletion(**kwargs)
-    except litellm.exceptions.Timeout as e:
-        raise LLMTimeoutError(str(e)) from e
-    except litellm.exceptions.RateLimitError as e:
-        raise LLMRateLimitError(str(e)) from e
-    except litellm.exceptions.APIError as e:
-        raise LLMError(str(e)) from e
-    # Non-litellm exceptions (TypeError, CancelledError, …) propagate — those are
-    # programming bugs or cooperative cancellation, not LLM errors.
+    except Exception as e:
+        raise _wrap_litellm_error(e) from e
 
     latency_ms = int((time.monotonic() - t0) * 1000)
 
@@ -138,12 +148,8 @@ async def _complete_streaming(
     t0 = time.monotonic()
     try:
         resp_stream = await litellm.acompletion(**kwargs)
-    except litellm.exceptions.Timeout as e:
-        raise LLMTimeoutError(str(e)) from e
-    except litellm.exceptions.RateLimitError as e:
-        raise LLMRateLimitError(str(e)) from e
-    except litellm.exceptions.APIError as e:
-        raise LLMError(str(e)) from e
+    except Exception as e:
+        raise _wrap_litellm_error(e) from e
 
     chunks: list[Any] = []
     parts: list[str] = []
@@ -207,12 +213,8 @@ async def _complete_with_tools(
         kwargs["messages"] = messages
         try:
             resp = await litellm.acompletion(**kwargs)
-        except litellm.exceptions.Timeout as e:
-            raise LLMTimeoutError(str(e)) from e
-        except litellm.exceptions.RateLimitError as e:
-            raise LLMRateLimitError(str(e)) from e
-        except litellm.exceptions.APIError as e:
-            raise LLMError(str(e)) from e
+        except Exception as e:
+            raise _wrap_litellm_error(e) from e
 
         total_cost += _completion_cost(resp)
         usage = getattr(resp, "usage", None)
