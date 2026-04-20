@@ -3,8 +3,6 @@
 Gated by the env var `COUNCIL_OLLAMA_IT=1` — the CI matrix does not run it by default.
 """
 
-from __future__ import annotations
-
 import os
 from pathlib import Path
 

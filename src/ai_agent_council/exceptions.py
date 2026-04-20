@@ -1,7 +1,5 @@
 """Exceptions for the council."""
 
-from __future__ import annotations
-
 
 class CouncilError(Exception):
     """Base for all council errors."""
@@ -9,14 +7,6 @@ class CouncilError(Exception):
 
 class CouncilConfigError(CouncilError):
     """Invalid roster or config."""
-
-
-class AgentError(CouncilError):
-    """Unrecoverable agent failure."""
-
-
-class PhaseError(CouncilError):
-    """A phase could not be completed."""
 
 
 class LLMError(CouncilError):

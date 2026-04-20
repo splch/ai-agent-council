@@ -1,7 +1,5 @@
 """Typer CLI: `council run | init | validate`."""
 
-from __future__ import annotations
-
 import asyncio
 import shutil
 import sys
@@ -15,10 +13,9 @@ from rich.panel import Panel
 from rich.rule import Rule
 
 from .config import load_council_config
-from .council import Council
+from .council import Council, write_transcript
 from .exceptions import CouncilConfigError
 from .models import PhaseOutput
-from .transcript import write_transcript
 
 app = typer.Typer(
     add_completion=False,
@@ -26,8 +23,9 @@ app = typer.Typer(
     help="A Belbin-roles multi-agent council running the Braintrust workflow.",
 )
 
-_console = Console(stderr=True)
-_stdout = Console()
+# All council chatter (phase streaming, log lines) goes to stderr so that piping the final
+# answer — which we emit on stdout via a bare print — works cleanly.
+_err = Console(stderr=True)
 
 
 _TEMPLATE_PACKAGE = "ai_agent_council.templates"
@@ -40,7 +38,7 @@ AVAILABLE_TEMPLATES = (
 
 
 class RichPhasePrinter:
-    """Stream phase output to stdout as each phase completes."""
+    """Stream each PhaseOutput to stderr as it completes."""
 
     def __init__(self, *, quiet: bool) -> None:
         self.quiet = quiet
@@ -48,24 +46,24 @@ class RichPhasePrinter:
     def __call__(self, phase: PhaseOutput) -> None:
         if self.quiet:
             return
-        _stdout.print(Rule(f"[bold]{phase.phase.value.upper()}[/bold] ({phase.elapsed_ms} ms)"))
+        _err.print(Rule(f"[bold]{phase.phase.value.upper()}[/bold] ({phase.elapsed_ms} ms)"))
         if not phase.messages:
-            _stdout.print("[dim](no participants for this phase)[/dim]")
+            _err.print("[dim](no participants for this phase)[/dim]")
             return
         for msg in phase.messages:
             title = f"{msg.agent_name} [{msg.role.value}] — {msg.model}"
-            if msg.error:
-                body = f"[red]ERROR:[/red] {msg.error}"
-            else:
-                body = msg.content or "[dim](empty)[/dim]"
-            _stdout.print(Panel.fit(body, title=title, border_style="blue"))
+            body = (
+                f"[red]ERROR:[/red] {msg.error}"
+                if msg.error
+                else (msg.content or "[dim](empty)[/dim]")
+            )
+            _err.print(Panel.fit(body, title=title, border_style="blue"))
 
     def final(self, final_answer: str) -> None:
-        if self.quiet:
-            _stdout.print(final_answer)
-            return
-        _stdout.print(Rule("[bold green]FINAL ANSWER[/bold green]"))
-        _stdout.print(Panel.fit(final_answer, border_style="green"))
+        if not self.quiet:
+            _err.print(Rule("[bold green]FINAL ANSWER[/bold green]"))
+        # Stdout, plain text: pipes and redirection Just Work.
+        print(final_answer)
 
 
 def _resolve_template(name: str) -> Path:
@@ -98,7 +96,7 @@ def run(
     try:
         cfg = load_council_config(config)
     except CouncilConfigError as e:
-        _console.print(f"[red]config error:[/red] {e}")
+        _err.print(f"[red]config error:[/red] {e}")
         raise typer.Exit(code=2) from e
 
     council = Council(cfg)
@@ -107,7 +105,7 @@ def run(
     printer.final(result.final_answer)
     if transcript is not None:
         written = write_transcript(result, transcript)
-        _console.print(f"[dim]transcript: {written}[/dim]")
+        _err.print(f"[dim]transcript: {written}[/dim]")
 
 
 @app.command()
@@ -131,11 +129,11 @@ def init(
     """Scaffold a starter council config from a shipped template."""
     src = _resolve_template(template)
     if path.exists() and not force:
-        _console.print(f"[red]{path} already exists; use --force to overwrite[/red]")
+        _err.print(f"[red]{path} already exists; use --force to overwrite[/red]")
         raise typer.Exit(code=1)
     path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(src, path)
-    _console.print(f"[green]wrote {path} from template {template!r}[/green]")
+    _err.print(f"[green]wrote {path} from template {template!r}[/green]")
 
 
 @app.command()
@@ -148,17 +146,17 @@ def validate(
     try:
         cfg = load_council_config(config)
     except CouncilConfigError as e:
-        _console.print(f"[red]invalid:[/red] {e}")
+        _err.print(f"[red]invalid:[/red] {e}")
         raise typer.Exit(code=1) from e
-    _console.print(f"[green]ok[/green] — {len(cfg.agents)} agents, council {cfg.name!r}")
+    _err.print(f"[green]ok[/green] — {len(cfg.agents)} agents, council {cfg.name!r}")
     for agent in cfg.agents:
-        _console.print(
+        _err.print(
             f"  [cyan]{agent.name}[/cyan] ({agent.role.value}) → {agent.model} "
             f"[dim](family={agent.family}, t={agent.temperature})[/dim]"
         )
 
 
-def main() -> None:  # pragma: no cover — tiny wrapper
+def main() -> None:  # pragma: no cover
     try:
         app()
     except KeyboardInterrupt:

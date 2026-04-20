@@ -1,7 +1,5 @@
 """Config validation — the design-doc invariants live here."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

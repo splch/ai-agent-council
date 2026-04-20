@@ -1,7 +1,5 @@
 """CLI smoke tests via typer's CliRunner."""
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import pytest

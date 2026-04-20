@@ -1,7 +1,5 @@
 """Council configuration: pydantic schema, YAML loader, cognitive-diversity validator."""
 
-from __future__ import annotations
-
 import hashlib
 import re
 from pathlib import Path
@@ -70,9 +68,6 @@ class CouncilConfig(BaseModel):
     version: int = 1
     name: str = "default-council"
     agents: list[AgentConfig] = Field(min_length=4, max_length=8)
-    midpoint_reset: bool = False
-    max_phase_retries: int = Field(default=2, ge=0, le=5)
-    stream_stdout: bool = True
 
     @model_validator(mode="after")
     def _validate_roster(self) -> Self:

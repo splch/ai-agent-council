@@ -1,7 +1,5 @@
 """Agent: a frozen dataclass pairing an AgentConfig with its resolved system prompt."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Self
 

@@ -13,7 +13,6 @@
 
 version: 1
 name: workstation-4agent
-midpoint_reset: false
 
 agents:
   - name: Muse

@@ -11,9 +11,7 @@ deliberately a pure function of the task — it PHYSICALLY CANNOT reference peer
 output. That is the structural anti-anchoring invariant.
 """
 
-from __future__ import annotations
-
-from .models import Message, Role
+from .models import Message, PhaseOutput, Role
 
 COMMON_CODA = """\
 You are one member of a council. You have explicit permission — and responsibility — to
@@ -243,11 +241,8 @@ def render_finishing_prompt(task: str, synthesis_messages: list[Message]) -> str
     return "\n".join(parts)
 
 
-def render_orchestrate_prompt(task: str, phases_so_far: list[object]) -> str:
+def render_orchestrate_prompt(task: str, phases_so_far: list[PhaseOutput]) -> str:
     """Build the orchestrator-phase prompt, showing the full transcript."""
-    # Local import avoids a circular dependency at module-load time.
-    from .models import PhaseOutput
-
     parts: list[str] = [
         "Commander's Intent (the task):",
         task.strip(),
@@ -258,8 +253,6 @@ def render_orchestrate_prompt(task: str, phases_so_far: list[object]) -> str:
         "",
     ]
     for ph in phases_so_far:
-        if not isinstance(ph, PhaseOutput):
-            continue
         parts.append(f"### Phase: {ph.phase.value}")
         for m in ph.messages:
             header = f"[{m.agent_name} ({m.role.value})]"

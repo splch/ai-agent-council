@@ -18,7 +18,6 @@
 
 version: 1
 name: server-6agent
-midpoint_reset: true
 
 agents:
   - name: Muse

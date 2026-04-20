@@ -1,7 +1,5 @@
 """End-to-end council runs with FakeLLM."""
 
-from __future__ import annotations
-
 from ai_agent_council.config import CouncilConfig
 from ai_agent_council.council import Council, run_council
 from ai_agent_council.models import Phase, PhaseOutput

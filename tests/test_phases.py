@@ -1,9 +1,6 @@
 """Phase-runner tests. The anti-anchoring invariant is the load-bearing one."""
 
-from __future__ import annotations
-
 import inspect
-from typing import get_type_hints
 
 import pytest
 
@@ -28,9 +25,7 @@ def test_divergent_prompt_signature_is_anti_anchoring() -> None:
     physically does not accept it."""
     sig = inspect.signature(render_divergent_prompt)
     assert list(sig.parameters) == ["task"]
-    # `from __future__ import annotations` stringifies; resolve with get_type_hints.
-    hints = get_type_hints(render_divergent_prompt)
-    assert hints["task"] is str
+    assert sig.parameters["task"].annotation is str
 
 
 async def test_divergent_anti_anchoring_across_agents(

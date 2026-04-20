@@ -21,14 +21,6 @@ dependencies = [
     "tenacity>=9.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3",
-    "pytest-asyncio>=0.24",
-    "ruff>=0.8",
-    "ty>=0.0.1a0",
-]
-
 [project.scripts]
 council = "ai_agent_council.cli:app"
 
@@ -42,7 +34,6 @@ packages = ["src/ai_agent_council"]
 [tool.hatch.build.targets.sdist]
 include = [
     "src/ai_agent_council",
-    "configs",
     "README.md",
     "pyproject.toml",
 ]

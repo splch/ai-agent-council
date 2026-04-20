@@ -7,8 +7,6 @@ the task. Peer output is structurally inaccessible here. `test_divergent_anti_an
 asserts no diverger's prompt contains any other diverger's output.
 """
 
-from __future__ import annotations
-
 import asyncio
 import time
 from typing import TYPE_CHECKING

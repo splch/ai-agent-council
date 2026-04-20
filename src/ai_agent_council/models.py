@@ -1,7 +1,5 @@
 """Runtime data models. Pydantic-first — serialization is `model_dump_json`."""
 
-from __future__ import annotations
-
 from datetime import UTC, datetime
 from enum import StrEnum
 

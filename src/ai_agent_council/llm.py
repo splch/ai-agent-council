@@ -4,8 +4,6 @@ Exposes a single async function, `complete`, that the rest of the package calls.
 import `litellm` directly — this is the seam for tests (monkeypatched with a FakeLLM).
 """
 
-from __future__ import annotations
-
 import time
 from typing import Any, cast
 
