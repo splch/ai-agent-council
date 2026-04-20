@@ -1,0 +1,74 @@
+# Default eval task set. Intentionally small and diverse — councils earn their
+# keep on tasks with clear subtask specialization, high stakes with peer-review
+# catching errors, or creative work with divergent framings. They DON'T earn
+# it on routine factual Q&A. This set includes both so the baseline comparison
+# is honest.
+
+name: "default-eval"
+
+tasks:
+  # --- Factual: councils likely unnecessary ---
+  - id: factual_1
+    category: factual
+    task: "In what year was the Python 3.0 release, and what was the main backwards-incompatible change that prompted the major-version bump?"
+
+  - id: factual_2
+    category: factual
+    task: "What is the difference between a weak reference and a soft reference in Java, and give one concrete use case for each."
+
+  # --- Reasoning: councils should help via Analyst + Skeptic ---
+  - id: reasoning_1
+    category: reasoning
+    task: "A farmer has 17 sheep. All but 9 die. How many are left? Show your reasoning."
+
+  - id: reasoning_2
+    category: reasoning
+    task: |
+      Three switches in the basement each control one of three light bulbs upstairs.
+      All switches start off and all bulbs start off. You can flip switches as many
+      times as you want, then go upstairs exactly once. Describe a procedure that
+      lets you correctly match every switch to its bulb. Explain why it works.
+
+  # --- Code: councils should help via Specialist + Finisher verification ---
+  - id: code_1
+    category: code
+    task: |
+      Write a Python function `is_balanced(s: str) -> bool` that returns True iff
+      the brackets in `s` are balanced. Support (), [], and {}. Include three
+      edge cases in the docstring and test them.
+
+  - id: code_2
+    category: code
+    task: |
+      You're given this buggy Python function:
+
+          def median(xs):
+              xs = sorted(xs)
+              n = len(xs)
+              return xs[n // 2]
+
+      Describe every bug you can find, then produce a corrected version with a
+      brief justification for each change.
+
+  # --- Creative: councils should help via divergent framings ---
+  - id: creative_1
+    category: creative
+    task: "Write three distinct one-sentence pitches for a novel about a lighthouse keeper in 2089 who discovers the ocean is learning to read. Each pitch should have a different emotional tone."
+
+  - id: creative_2
+    category: creative
+    task: "Propose three alternative system designs for a note-taking app whose unique constraint is that every note must be readable by the author's future self in 50 years. Sketch trade-offs."
+
+  # --- Synthesis: the Chairman's home ground ---
+  - id: synthesis_1
+    category: synthesis
+    task: |
+      The research on multi-agent LLM systems has produced conflicting results:
+      some papers (Du et al. 2023) find debate significantly improves accuracy,
+      while others (Li et al. 2025) find single-model aggregation beats mixed
+      debate in many scenarios. What's a defensible synthesis position?
+
+  # --- Uncertainty: councils should lead with "we don't know" ---
+  - id: uncertain_1
+    category: uncertain
+    task: "What is the most important open problem in P vs NP research that was resolved between 2020 and 2024?"

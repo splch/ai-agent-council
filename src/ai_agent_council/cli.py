@@ -198,3 +198,52 @@ def validate(
             f"  [cyan]{agent.name}[/cyan] ({agent.role.value}) → {agent.model} "
             f"[dim](family={agent.family}, t={agent.temperature})[/dim]"
         )
+
+
+@app.command()
+def eval(
+    config: Annotated[
+        Path, typer.Option("--config", "-c", help="Council YAML.", exists=True, readable=True)
+    ],
+    tasks: Annotated[
+        Path,
+        typer.Option("--tasks", "-t", help="Task set YAML.", exists=True, readable=True),
+    ],
+    baseline: Annotated[
+        str | None,
+        typer.Option(
+            "--baseline",
+            "-b",
+            help="LiteLLM model string for a single-model baseline (e.g. ollama/phi4:14b).",
+        ),
+    ] = None,
+    out: Annotated[
+        Path,
+        typer.Option("--out", "-o", help="Where to write the JSON report."),
+    ] = Path("eval-report.json"),
+) -> None:
+    """Run a task set through the council (and optionally a baseline) for comparison.
+
+    Quality scoring is intentionally out-of-band — inspect the JSON report manually
+    or feed it to a judge model. The harness's job is to produce apples-to-apples
+    data on the same tasks; grading is yours.
+    """
+    from .evals import run_eval_from_paths
+
+    _err.print(
+        f"[dim]running council {config.name} against {tasks.name}"
+        + (f" vs baseline {baseline}" if baseline else " (council-only)")
+        + "[/dim]"
+    )
+    report = run_eval_from_paths(tasks, config, baseline_model=baseline)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+
+    _err.print(Rule("[bold]TOTALS[/bold]"))
+    for mode, tot in report.totals.items():
+        _err.print(
+            f"  [cyan]{mode}[/cyan]: "
+            f"{int(tot['tokens_in'])} in / {int(tot['tokens_out'])} out · "
+            f"${tot['cost_usd']:.4f} · {int(tot['elapsed_ms'])} ms"
+        )
+    _err.print(f"[dim]report: {out}[/dim]")
