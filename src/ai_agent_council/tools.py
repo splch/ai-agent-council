@@ -13,19 +13,35 @@ The shipped tools are deliberately narrow and sandboxed at the source:
     * `calculate`           — AST-validated arithmetic, no builtins, no attribute access
     * `read_file`           — refuses paths outside the current working directory tree,
                               caps output at 8 KB
+    * `fetch_url`           — HTTP GET only, http/https schemes only, follows at most 3
+                              redirects, 10s timeout, 64 KB response cap, rejects
+                              private / link-local / loopback hosts (SSRF protection)
 
-Arbitrary code execution, unrestricted web access, and shell calls are **not** included.
-Users who want them can register their own tools at runtime via `register`, at which point
-the responsibility for sandboxing is theirs.
+Explicitly NOT shipped:
+
+    * Arbitrary Python execution — cannot be safely sandboxed without platform-
+      specific tooling (firejail/nsjail/bubblewrap). Users who need it can add a
+      tool that shells out to their own sandbox.
+    * Web search — requires an API key choice and varies in quality across
+      backends. Users should register their own wrapper around whatever
+      search service they trust.
+
+Any additional tools a user registers are their own responsibility to sandbox.
 """
 
 import ast
+import ipaddress
 import operator as op
+import socket
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -203,5 +219,132 @@ register(
             "required": ["path"],
         },
         fn=_read_file,
+    )
+)
+
+
+# -----------------------------------------------------------------------------
+# fetch_url — HTTP GET with SSRF protection
+# -----------------------------------------------------------------------------
+#
+# The research's "verification gates beat critic opinions" argument depends on
+# the Finisher being able to check claims against an external source of truth.
+# fetch_url is the minimum viable verifier: the Finisher sees a claim, pulls
+# the referenced page, and can then reason against the retrieved text.
+#
+# Safety constraints are non-negotiable because the URL comes from an LLM:
+#   * scheme allowlist (http/https only)
+#   * DNS resolution + private/loopback/link-local IP rejection (SSRF)
+#   * maximum 3 redirects, each re-validated
+#   * 10 second total timeout
+#   * 64 KB hard cap on response size; 8 KB of text returned to the model
+
+_FETCH_TIMEOUT_S = 10.0
+_FETCH_MAX_REDIRECTS = 3
+_FETCH_MAX_BYTES = 64 * 1024
+_FETCH_MAX_RETURN = 8 * 1024
+_ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+
+def _is_public_address(host: str) -> bool:
+    """Resolve `host` and verify every returned address is routable-public.
+    Returns False on any private/loopback/link-local/reserved address.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return False
+    for family, _type, _proto, _canon, sockaddr in infos:
+        if family not in (socket.AF_INET, socket.AF_INET6):
+            continue
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False
+    return True
+
+
+def _fetch_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in _ALLOWED_SCHEMES:
+        return f"error: only http/https URLs are allowed (got {parsed.scheme!r})"
+    if not parsed.hostname:
+        return f"error: no hostname in {url!r}"
+    if not _is_public_address(parsed.hostname):
+        return f"error: refusing to fetch private/loopback address {parsed.hostname!r}"
+
+    current_url = url
+    for _ in range(_FETCH_MAX_REDIRECTS + 1):
+        try:
+            req = urllib.request.Request(
+                current_url,
+                headers={"User-Agent": "ai-agent-council/fetch_url"},
+            )
+            # manual redirect handling so every hop re-validates the SSRF check
+            opener = urllib.request.build_opener(_NoRedirectHandler())
+            with opener.open(req, timeout=_FETCH_TIMEOUT_S) as resp:
+                status = resp.status
+                if status in (301, 302, 303, 307, 308):
+                    loc = resp.headers.get("Location")
+                    if not loc:
+                        return f"error: redirect with no Location header from {current_url!r}"
+                    current_url = urllib.parse.urljoin(current_url, loc)
+                    re_parsed = urlparse(current_url)
+                    if re_parsed.scheme not in _ALLOWED_SCHEMES:
+                        return f"error: redirect to disallowed scheme {re_parsed.scheme!r}"
+                    if not re_parsed.hostname or not _is_public_address(re_parsed.hostname):
+                        return f"error: redirect to non-public host {re_parsed.hostname!r}"
+                    continue
+                body = resp.read(_FETCH_MAX_BYTES + 1)
+                break
+        except urllib.error.HTTPError as e:
+            return f"error: HTTP {e.code} from {current_url!r}"
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            return f"error: {type(e).__name__}: {e}"
+    else:
+        return f"error: too many redirects fetching {url!r}"
+
+    if len(body) > _FETCH_MAX_BYTES:
+        body = body[:_FETCH_MAX_BYTES]
+    try:
+        text = body.decode("utf-8", errors="replace")
+    except Exception as e:
+        return f"error: decode failed: {e}"
+    return text[:_FETCH_MAX_RETURN]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """urllib follows redirects by default. We handle them ourselves so every hop
+    re-runs the SSRF / scheme checks."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[override]
+        return None
+
+
+register(
+    Tool(
+        name="fetch_url",
+        description=(
+            "HTTP GET a public http/https URL and return up to 8 KB of text. "
+            "Refuses private/loopback/link-local hosts, non-http schemes, and more than "
+            f"{_FETCH_MAX_REDIRECTS} redirects. Times out after {_FETCH_TIMEOUT_S:.0f}s."
+        ),
+        parameters_schema={
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "A fully-qualified http:// or https:// URL.",
+                }
+            },
+            "required": ["url"],
+        },
+        fn=_fetch_url,
     )
 )
