@@ -63,7 +63,7 @@ def load_recent(
     Malformed lines are skipped silently rather than aborting the whole load — the log is
     meant to be append-only, but partial writes can happen."""
     path = _path_for(council_name, dir_)
-    if not path.exists():
+    if not path.exists() or limit <= 0:
         return []
     lines = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
     out: list[Retrospective] = []

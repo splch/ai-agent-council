@@ -116,6 +116,13 @@ def test_load_recent_missing_file_returns_empty(tmp_path: Path) -> None:
     assert retrospectives.load_recent("never-run", dir_=tmp_path) == []
 
 
+def test_load_recent_limit_zero_returns_empty(tmp_path: Path) -> None:
+    """`lines[-0:]` is `lines[:]`; guard against the off-by-everything."""
+    for i in range(3):
+        retrospectives.append(_make_record("zero", f"l{i}"), dir_=tmp_path)
+    assert retrospectives.load_recent("zero", limit=0, dir_=tmp_path) == []
+
+
 def test_load_recent_skips_malformed_lines(tmp_path: Path) -> None:
     path = tmp_path / "test.jsonl"
     good = _make_record("test", "good").model_dump_json()

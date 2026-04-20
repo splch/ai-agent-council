@@ -95,13 +95,23 @@ register(
 )
 
 
-_ARITH_OPS: dict[type[ast.operator] | type[ast.unaryop], Callable[..., float]] = {
+def _safe_pow(base: float, exp: float) -> float:
+    """`9 ** 9 ** 9` (and similar nested exponents) can hang CPython for minutes while
+    allocating a single gigantic bignum — during which the whole asyncio loop stalls,
+    since tool calls run inline on `await tool.fn(**args)`. Bound both operands so an
+    adversarial model can't freeze the council with one expression."""
+    if abs(exp) > 1000 or abs(base) > 10**100:
+        raise ValueError("calculator refuses exponent/base that large")
+    return base**exp
+
+
+_ARITH_OPS: dict[type[ast.operator | ast.unaryop], Callable[..., float]] = {
     ast.Add: op.add,
     ast.Sub: op.sub,
     ast.Mult: op.mul,
     ast.Div: op.truediv,
     ast.Mod: op.mod,
-    ast.Pow: op.pow,
+    ast.Pow: _safe_pow,
     ast.FloorDiv: op.floordiv,
     ast.USub: op.neg,
     ast.UAdd: op.pos,

@@ -70,6 +70,21 @@ def test_calculate_handles_divide_by_zero() -> None:
     assert out.startswith("error:")
 
 
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "9 ** 9 ** 9",  # nested pow — would hang without the cap
+        "10 ** 5000",  # huge exponent alone
+        "(10**200) ** 10",  # huge base
+    ],
+)
+def test_calculate_refuses_huge_powers(expression: str) -> None:
+    """Without a bound, an adversarial model could freeze the whole event loop with one
+    expression. The cap must fire before CPython starts allocating a gigantic bignum."""
+    out = tools.get("calculate").fn(expression=expression)
+    assert out.startswith("error:"), f"expected refusal, got {out[:40]!r}"
+
+
 def test_read_file_refuses_paths_outside_cwd(tmp_path: Path) -> None:
     """The sandbox is intentional — no `/etc/passwd` no matter what the LLM asks."""
     out = tools.get("read_file").fn(path="/etc/passwd")
