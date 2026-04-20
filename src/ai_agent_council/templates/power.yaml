@@ -1,16 +1,25 @@
-# Power council per the design brief: 64GB+ unified memory or multi-GPU, 6 agents.
-# Full roster, largest variants, all-local.
+# Power council: 64GB+ unified memory or multi-GPU, 6 agents, all-local.
+# Same role capability specs as the Workstation tier, but with the largest
+# viable variant of each family.
 #
 # Models to pull:
-#   gemma3:27b           17 GB    Ideator
-#   deepseek-r1:32b      20 GB    Reasoner
-#   qwen2.5-coder:32b    20 GB    Specialist (swap to qwen3-coder:30b once available)
-#   gpt-oss:20b          13 GB    Critic — different family from Ideator per the rule
-#   mistral-small        14 GB    Finisher — tool-calling capable
-#   llama3.3:70b         43 GB    Orchestrator — strongest local generalist
+#   qwen3.6:latest           23 GB    Pioneer — 35B MoE (or qwen3.6:35b explicit)
+#   deepseek-r1:70b          43 GB    Analyst — reasoning at scale
+#   qwen3-coder-next         varies   Specialist — long-context agentic coding
+#   gpt-oss:120b             65 GB    Skeptic — strongest open Microsoft-era
+#                                     reasoning; three reasoning-effort levels
+#   mistral-small3:latest    14 GB    Finisher — latest tool-calling release
+#   llama3.3:70b             43 GB    Chairman — synthesis-specialist generalist
 #
-# Families: gemma / deepseek / qwen / gpt / mistral / llama — six distinct.
-# Total disk ~127 GB.
+# NOTE: if qwen3-coder-next is unavailable on your Ollama version, substitute
+# qwen2.5-coder:32b — but check family diversity (qwen is already Pioneer).
+# Swap Specialist to devstral-small-2:24b if that collision matters.
+#
+# Families: qwen / deepseek / qwen (!) — collision. Resolved by using Devstral
+# as Specialist below. Final families: qwen / deepseek / devstral / gpt /
+# mistral / llama — six distinct.
+#
+# Total disk ~200 GB. Most rigs run at most 2-3 concurrently; Ollama swaps.
 
 version: 1
 name: power
@@ -18,38 +27,63 @@ name: power
 agents:
   - name: Muse
     role: ideator
-    model: ollama/gemma3:27b
+    # Pioneer spec — see workstation.yaml for the full capability rationale.
+    # qwen3.6:35b remains the strongest open divergent-thinker in April 2026.
+    # Kimi-K2.5 (cloud) is the ceiling if you enable :cloud tags.
+    model: ollama/qwen3.6:latest
     temperature: 0.9
     max_tokens: 2048
 
   - name: Judge
     role: reasoner
-    model: ollama/deepseek-r1:32b
-    temperature: 0.4
+    # Analyst spec — see workstation.yaml. At Power scale, the 70B DeepSeek-R1
+    # variant's longer reasoning chains and higher AIME/GPQA make it worth the
+    # VRAM cost. DeepSeek-V3.2 (cloud) achieves parity with Gemini-3.0-Pro on
+    # olympiad math, if you enable cloud tags.
+    model: ollama/deepseek-r1:70b
+    temperature: 0.3
     max_tokens: 4096
 
   - name: Adept
     role: specialist
-    model: ollama/qwen2.5-coder:32b
-    temperature: 0.5
+    # Specialist spec — see workstation.yaml. Devstral Small 2 is kept here
+    # rather than upgraded to Qwen3-Coder-32B/Next because Qwen family is
+    # already used by Pioneer (diversity rule). GLM-4.7:cloud is the best
+    # option if you enable cloud tags (SWE-bench 73.8%, Terminal Bench 41.0%).
+    model: ollama/devstral-small-2:24b
+    temperature: 0.4
     max_tokens: 4096
 
   - name: Hawk
     role: critic
-    model: ollama/gpt-oss:20b
+    # Skeptic spec — see workstation.yaml. At Power scale, gpt-oss:120b
+    # (OpenAI) or nemotron-3-super:120b (NVIDIA) both outperform the 20b
+    # on AIME/GPQA/MMLU-Pro. Nemotron 3 Super scores 36 on Intelligence
+    # Index vs GPT-OSS-120B at 33 — swap to nemotron if NVIDIA family
+    # adds diversity you want.
+    model: ollama/gpt-oss:120b
     temperature: 0.2
     max_tokens: 2048
     json_mode: true
 
   - name: Polish
     role: finisher
-    model: ollama/mistral-small
+    # Finisher spec — see workstation.yaml. Mistral Small 3 is the latest
+    # tool-calling release; the Ollama tag `mistral-small3:latest` (or
+    # `mistral-small:latest` as a fallback) is the pick.
+    model: ollama/mistral-small3:latest
     temperature: 0.1
     max_tokens: 3072
     tools: [current_time, calculate, read_file]
 
   - name: Scribe
     role: orchestrator
+    # Chairman spec — see workstation.yaml. At Power scale, Llama 3.3 70B
+    # remains the strongest open synthesis-specialist generalist — higher
+    # breadth than Gemma 4 31B, stronger instruction-following than
+    # reasoning-tuned models at size. Mistral-Large-3 (cloud) is the
+    # alternative if the Power config's Specialist or Finisher isn't
+    # Mistral-family.
     model: ollama/llama3.3:70b
     temperature: 0.3
     max_tokens: 3072

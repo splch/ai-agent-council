@@ -1,18 +1,19 @@
-# Workstation council per the design brief: 24GB VRAM, 6 agents, all-local.
-# Finisher uses `mistral-small` (the brief offered this or `gemma3:9b`; mistral is the
-# only choice that preserves the cognitive-diversity rule since gemma is already taken
-# by the Ideator).
+# Workstation council: 24GB VRAM (e.g. RTX 4090 class), 6 agents, all-local.
 #
-# Models to pull:
-#   gemma3:27b           17 GB    Ideator — strong generalist, higher temperature
-#   deepseek-r1:14b       9 GB    Reasoner — reasoning-specialist distillation
-#   qwen2.5-coder:32b    20 GB    Specialist — domain expert for code
-#   phi4:14b              9 GB    Critic — diagnostic, JSON-structured output
-#   mistral-small        14 GB    Finisher — polish, tool-calling, fact-check
-#   gpt-oss:20b          13 GB    Orchestrator — thin integration
+# Each model is chosen against a role-specific capability spec so that when a
+# model releases with higher scores on a role's primary benchmarks, the next
+# pick is obvious. Research-grounded picks as of April 2026.
 #
-# Families: gemma / deepseek / qwen / phi / mistral / gpt — six distinct.
-# Total disk ~82 GB. Will model-swap on a 24GB GPU; set OLLAMA_MAX_LOADED_MODELS=2.
+# Models to pull (`ollama pull …` or `docker exec ollama ollama pull …`):
+#   qwen3.6:latest          23 GB    Pioneer — 35B MoE / 3B active, 256K-1M context
+#   deepseek-r1:32b         20 GB    Analyst — explicit RLVR-trained reasoning chains
+#   devstral-small-2:24b    14 GB    Specialist — 68% SWE-bench Verified
+#   gpt-oss:20b             13 GB    Skeptic — different family, tunable reasoning depth
+#   mistral-small:latest    14 GB    Finisher — fast, tool-calling, polish
+#   gemma4:31b              17 GB    Chairman — Elo 1452 above 600B+ open models
+#
+# Families: qwen / deepseek / devstral / gpt / mistral / gemma — six distinct.
+# Total disk ~101 GB. Set OLLAMA_MAX_LOADED_MODELS=2 — Ollama swaps as needed.
 
 version: 1
 name: workstation
@@ -20,38 +21,73 @@ name: workstation
 agents:
   - name: Muse
     role: ideator
-    model: ollama/gemma3:27b
+    # Pioneer capability spec: high Elo-per-parameter on LMArena Creative Writing,
+    # long context (≥128K), strong instruction-following. DO NOT optimize for
+    # reasoning/math benchmarks here — that's the Analyst's role. When a model
+    # beats qwen3.6 on human-preference creative-writing Elo at comparable VRAM,
+    # swap it in. Higher temperature unlocks the divergent-framing capacity.
+    model: ollama/qwen3.6:latest
     temperature: 0.9
     max_tokens: 2048
 
   - name: Judge
     role: reasoner
-    model: ollama/deepseek-r1:14b
-    temperature: 0.4
+    # Analyst capability spec: AIME 2026 ≥ 80%, GPQA Diamond ≥ 80%, explicit
+    # <think> chain support (reasoning-tuned models are measurably less
+    # conformist in multi-agent studies — GPT-o1-mini scored 3.13% conformity
+    # vs GPT-4o at 19.45%). The visible reasoning chain is what the Skeptic can
+    # attack step-by-step. olmo-3.1:32b is a viable alternative from a distinct
+    # family (AI2) with MATH ~96.1%, HumanEvalPlus ~91.4%.
+    model: ollama/deepseek-r1:32b
+    temperature: 0.3
     max_tokens: 3072
 
   - name: Adept
     role: specialist
-    model: ollama/qwen2.5-coder:32b
-    temperature: 0.5
+    # Specialist capability spec: SWE-bench Verified ≥ 60%, Terminal-Bench 2.0 ≥
+    # 35%, τ²-Bench ≥ 80%, long context for repo-scale reasoning. Devstral
+    # Small 2 is the only top-tier agentic-coding model that fits 24GB (68%
+    # SWE-bench Verified, 256K context, Apache 2.0). Qwen3-Coder 30B-A3B is the
+    # next pick if license matters; beware that Qwen family is already used.
+    model: ollama/devstral-small-2:24b
+    temperature: 0.4
     max_tokens: 4096
 
   - name: Hawk
     role: critic
-    model: ollama/phi4:14b
+    # Skeptic capability spec: strong reasoning (AIME/GPQA above some floor),
+    # high instruction-following (IFEval ≥ 85), AND a different model family
+    # from all other council members. Family diversity dominates raw score
+    # differences here — the Skeptic's value is finding flaws the others'
+    # training distribution misses. gpt-oss:20b covers OpenAI distribution
+    # and offers three reasoning-effort levels (low/medium/high) via the
+    # system prompt, which is the adversarial-depth knob this role needs.
+    model: ollama/gpt-oss:20b
     temperature: 0.2
     max_tokens: 2048
     json_mode: true
 
   - name: Polish
     role: finisher
-    model: ollama/mistral-small
+    # Finisher capability spec: fast, reliable tool-use, native function
+    # calling, strong verification loops. Raw reasoning matters less —
+    # this role's mandate is rigor, not authorship. Mistral Small's
+    # tool-calling reliability and low latency are the fit. Gemma 3 9B
+    # is the non-Mistral alternative if you need family diversity.
+    model: ollama/mistral-small:latest
     temperature: 0.1
     max_tokens: 3072
     tools: [current_time, calculate, read_file]
 
   - name: Scribe
     role: orchestrator
-    model: ollama/gpt-oss:20b
+    # Chairman capability spec: IFEval ≥ 85, high LMArena Elo, ≥200K
+    # context for full-transcript ingestion, native system-prompt support
+    # for holding the behavioral contract. DO NOT optimize for AIME/GPQA
+    # — synthesis is not reasoning. Gemma 4 31B's Elo 1452 sits above
+    # Qwen 3.5-397B and GLM-5 (600-1000B range) while fitting 24GB,
+    # making it the Pareto-optimal Chairman pick. Swap when a model
+    # beats Gemma 4 on IFEval + LMArena Elo at the same VRAM band.
+    model: ollama/gemma4:31b
     temperature: 0.3
     max_tokens: 3072

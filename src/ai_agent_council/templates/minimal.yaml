@@ -1,16 +1,25 @@
-# Minimal council per the design brief: 16GB RAM laptop, 5 agents, all-local.
-# The Reasoner doubles as Critic in the critique phase — no separate Critic is
-# rostered, and the validator allows this shape.
+# Minimal council: 16GB RAM laptop, 5 agents, all-local. The Reasoner doubles
+# as Critic in the critique phase — no separate Critic is rostered, and the
+# validator allows this shape.
 #
-# Models to pull (`docker exec ollama ollama pull …` or `ollama pull …`):
-#   llama3.1:8b        4.7 GB    Ideator — strong generalist, higher temperature
-#   deepseek-r1:7b     4.7 GB    Reasoner — step-by-step analysis, doubles as critic
-#   qwen2.5-coder:7b   4.7 GB    Specialist — domain expert, swap in for coding tasks
-#   gemma3:4b          3.3 GB    Finisher — polish, tool-calling
-#   phi4:14b           9.1 GB    Orchestrator — thin routing + synthesis
+# The Minimal tier's picks are less about "latest and greatest" and more about
+# "every agent clears the capability floor." Research (Wan et al., 2025) shows
+# that introducing a weaker agent into a debate with stronger peers can make
+# the outcome worse than no discussion — so nothing in this roster falls
+# below the sub-quality threshold for its role.
 #
-# Families: llama / deepseek / qwen / gemma / phi — five distinct lineages.
-# VRAM tip: set `OLLAMA_MAX_LOADED_MODELS=2` so Ollama swaps on a 12GB GPU.
+# Models to pull (`ollama pull …` or `docker exec ollama ollama pull …`):
+#   llama3.1:8b         4.7 GB   Ideator — solid generalist, 128K context
+#   deepseek-r1:7b      4.7 GB   Reasoner — smallest reasoning-tuned variant
+#                                that retains meaningful <think> chains
+#   qwen2.5-coder:7b    4.7 GB   Specialist — strongest sub-14B coder at this
+#                                tier (coder-specialist beats generalist here)
+#   gemma3:4b           3.3 GB   Finisher — fast, tool-capable, lowest latency
+#   phi4:14b            9.1 GB   Orchestrator — thin routing + synthesis;
+#                                Microsoft family for diversity
+#
+# Families: llama / deepseek / qwen / gemma / phi — five distinct.
+# VRAM tip: set `OLLAMA_MAX_LOADED_MODELS=2` — Ollama swaps on 12GB GPUs.
 
 version: 1
 name: minimal
@@ -18,24 +27,41 @@ name: minimal
 agents:
   - name: Muse
     role: ideator
+    # Pioneer spec — high Elo-per-parameter, long context, instruction-following.
+    # Llama 3.1 8B is the sweet-spot generalist at this size: 128K context,
+    # reliably creative without being unhinged. Replace with qwen3:7b if Qwen's
+    # next creative-writing scores pull ahead, but keep the family rule in mind
+    # (Specialist is already Qwen).
     model: ollama/llama3.1:8b
     temperature: 0.9
     max_tokens: 1536
 
   - name: Judge
     role: reasoner
+    # Analyst spec — AIME / GPQA / explicit reasoning chains. DeepSeek-R1 at
+    # 7B is the smallest variant where the <think> chain is still attackable
+    # in a meaningful way. Also doubles as the Critic in this config since
+    # no dedicated Critic is rostered (validator permits this shape).
     model: ollama/deepseek-r1:7b
     temperature: 0.4
     max_tokens: 2048
 
   - name: Adept
     role: specialist
+    # Specialist spec — for coding, SWE-bench Verified matters most. At sub-
+    # 14B size, coder-specialist models (Qwen2.5-Coder 7B here) reliably beat
+    # generalists on code tasks. For non-coding domain work, swap in
+    # medgemma:4b (medical), etc.
     model: ollama/qwen2.5-coder:7b
     temperature: 0.5
     max_tokens: 2048
 
   - name: Polish
     role: finisher
+    # Finisher spec — tool-calling, low latency, fact-check. Gemma 3 4B at
+    # 3.3GB is the fastest tool-capable model in the family rotation. Built-in
+    # function calling (Gemma 3/4 series) means the tools wired in below
+    # actually get used during verification.
     model: ollama/gemma3:4b
     temperature: 0.1
     max_tokens: 1536
@@ -43,6 +69,11 @@ agents:
 
   - name: Scribe
     role: orchestrator
+    # Chairman spec — IFEval, LMArena Elo, long context. Phi-4 14B has the
+    # strongest reasoning-per-GB of any model in this size class (MATH 80.4%
+    # vs Llama 3.3 8B at 68.0%), and its Microsoft training distribution
+    # completes the family rotation at this tier. Upgrade to phi5 when Ollama
+    # lists it, or switch to mistral-small3 if VRAM permits.
     model: ollama/phi4:14b
     temperature: 0.3
     max_tokens: 2048
