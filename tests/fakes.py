@@ -6,6 +6,7 @@ from typing import Any
 
 from ai_agent_council.exceptions import LLMError
 from ai_agent_council.llm import CompletionMeta
+from ai_agent_council.tools import Tool
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,8 @@ class FakeLLM:
         timeout_s: float,
         json_mode: bool = False,
         stream_handler: Callable[[str], None] | None = None,
+        tools: list[Tool] | None = None,
+        max_tool_iterations: int = 5,
     ) -> tuple[str, CompletionMeta]:
         call = FakeCall(
             model=model,
@@ -83,6 +86,21 @@ class FakeLLM:
             "latency_ms": 1,
             "cost_usd": self.cost_per_call,
         }
+        # If tools are wired in, drive them once with empty args so a test can assert the
+        # loop plumbs through. Real model-driven tool-call tests bypass the fake and hit
+        # litellm directly under COUNCIL_OLLAMA_IT.
+        if tools:
+            recorded = []
+            for tool in tools:
+                try:
+                    result = str(tool.fn())
+                    err = None
+                except TypeError as e:
+                    result, err = f"error: {e}", str(e)
+                recorded.append(
+                    {"name": tool.name, "arguments": {}, "result": result, "error": err}
+                )
+            meta["tool_calls_made"] = recorded
         return content, meta
 
 

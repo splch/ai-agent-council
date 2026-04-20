@@ -1,14 +1,16 @@
 """Agent: a frozen dataclass pairing an AgentConfig with its resolved system prompt."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Self
 
 from . import llm
 from .config import AgentConfig
 from .exceptions import LLMError
 from .llm import StreamHandler
-from .models import Message, Phase
+from .models import Message, Phase, ToolCall
 from .prompts import render_role_prompt
+from .tools import Tool
+from .tools import resolve as _resolve_tools
 
 
 @dataclass(slots=True, frozen=True)
@@ -23,11 +25,12 @@ class Agent:
 
     config: AgentConfig
     system_prompt: str
+    tools: list[Tool] = field(default_factory=list)
 
     @classmethod
     def from_config(cls, cfg: AgentConfig) -> Self:
         prompt = cfg.system_prompt if cfg.system_prompt else render_role_prompt(cfg.role, cfg.name)
-        return cls(config=cfg, system_prompt=prompt)
+        return cls(config=cfg, system_prompt=prompt, tools=_resolve_tools(cfg.tools))
 
     async def respond(
         self,
@@ -47,6 +50,7 @@ class Agent:
                 timeout_s=cfg.timeout_s,
                 json_mode=cfg.json_mode,
                 stream_handler=stream_handler,
+                tools=self.tools or None,
             )
             return Message(
                 role=cfg.role,
@@ -59,6 +63,7 @@ class Agent:
                 tokens_out=meta.get("tokens_out"),
                 latency_ms=meta.get("latency_ms"),
                 cost_usd=meta.get("cost_usd"),
+                tool_calls=[ToolCall(**tc) for tc in (meta.get("tool_calls_made") or [])],
             )
         except LLMError as e:
             return Message(

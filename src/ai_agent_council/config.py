@@ -54,6 +54,9 @@ class AgentConfig(BaseModel):
     timeout_s: float = Field(default=120.0, gt=0.0)
     system_prompt: str | None = None
     json_mode: bool = False
+    # Names of tools from ai_agent_council.tools the agent may call during its turn. Only
+    # the Finisher uses tools in the shipped templates, but any role can opt in.
+    tools: list[str] = Field(default_factory=list)
 
     @property
     def family(self) -> str:

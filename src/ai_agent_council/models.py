@@ -89,9 +89,7 @@ class CouncilResult(BaseModel):
     def total_cost_usd(self) -> float:
         """Sum of per-message cost across the whole run (USD). Zero for models LiteLLM
         doesn't price (e.g. local Ollama)."""
-        return sum(
-            (m.cost_usd or 0.0) for ph in self.phases for m in ph.messages
-        )
+        return sum((m.cost_usd or 0.0) for ph in self.phases for m in ph.messages)
 
     @property
     def total_tokens(self) -> tuple[int, int]:

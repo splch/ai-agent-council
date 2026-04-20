@@ -57,9 +57,7 @@ class Council:
         _emit(stream, critique)
         phases_run.append(critique)
 
-        synthesis = await phases_mod.run_synthesis(
-            self, task, divergent, critique, tokens=tokens
-        )
+        synthesis = await phases_mod.run_synthesis(self, task, divergent, critique, tokens=tokens)
         _emit(stream, synthesis)
         phases_run.append(synthesis)
 
@@ -68,9 +66,7 @@ class Council:
             _emit(stream, finishing)
             phases_run.append(finishing)
 
-        orchestration = await phases_mod.run_orchestrate(
-            self, task, phases_run, tokens=tokens
-        )
+        orchestration = await phases_mod.run_orchestrate(self, task, phases_run, tokens=tokens)
         _emit(stream, orchestration)
         phases_run.append(orchestration)
 

@@ -141,16 +141,12 @@ def run(
     council = Council(cfg)
     phase_printer = RichPhasePrinter(quiet=quiet, streaming=stream)
     token_printer = TokenPrinter() if (stream and not quiet) else None
-    result = asyncio.run(
-        council.run(task, stream=phase_printer, tokens=token_printer)
-    )
+    result = asyncio.run(council.run(task, stream=phase_printer, tokens=token_printer))
     if token_printer is not None:
         token_printer.reset()
     phase_printer.final(result.final_answer)
     tin, tout = result.total_tokens
-    _err.print(
-        f"[dim]tokens: {tin} in / {tout} out · cost: ${result.total_cost_usd:.4f}[/dim]"
-    )
+    _err.print(f"[dim]tokens: {tin} in / {tout} out · cost: ${result.total_cost_usd:.4f}[/dim]")
     if transcript is not None:
         written = write_transcript(result, transcript)
         _err.print(f"[dim]transcript: {written}[/dim]")

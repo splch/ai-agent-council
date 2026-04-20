@@ -50,6 +50,9 @@ agents:
     model: ollama/mistral-small
     temperature: 0.1
     max_tokens: 3072
+    # Finisher tools: fact-check against clock, do arithmetic, pull text from
+    # the working directory. See ai_agent_council.tools for the sandbox.
+    tools: [current_time, calculate, read_file]
 
   - name: Scribe
     role: orchestrator

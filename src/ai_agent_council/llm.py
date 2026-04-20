@@ -4,6 +4,7 @@ Exposes a single async function, `complete`, that the rest of the package calls.
 import `litellm` directly — this is the seam for tests (monkeypatched with a FakeLLM).
 """
 
+import json
 import time
 from collections.abc import Callable
 from typing import Any, cast
@@ -17,6 +18,7 @@ from tenacity import (
 )
 
 from .exceptions import LLMError, LLMRateLimitError, LLMTimeoutError
+from .tools import Tool
 
 # Meta bag returned alongside each completion. Keys: tokens_in, tokens_out (int | None),
 # latency_ms (int), cost_usd (float — zero for models LiteLLM doesn't price, e.g. Ollama).
@@ -51,6 +53,8 @@ async def complete(
     timeout_s: float,
     json_mode: bool = False,
     stream_handler: StreamHandler | None = None,
+    tools: list[Tool] | None = None,
+    max_tool_iterations: int = 5,
 ) -> tuple[str, CompletionMeta]:
     """Call an LLM via LiteLLM. Returns (content, meta).
 
@@ -58,6 +62,12 @@ async def complete(
     delta is passed to the handler as it arrives. The full content is still accumulated and
     returned in the same tuple shape — callers that want both streaming and a final value
     get both.
+
+    When `tools` is given, the multi-turn tool-calling loop is used: the model may request
+    tool invocations, which are executed locally and fed back for up to
+    `max_tool_iterations` rounds before the final content is returned. Streaming is not
+    combined with tool-calling in this release — if both are requested, tool-calling wins
+    and the stream_handler is ignored.
 
     Raises `LLMError` (or subclass) on failure. Retries timeouts and rate-limits with
     exponential-jitter backoff; surface other errors immediately.
@@ -75,6 +85,9 @@ async def complete(
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
+
+    if tools:
+        return await _complete_with_tools(kwargs, messages, tools, max_tool_iterations)
 
     if stream_handler is not None:
         return await _complete_streaming(kwargs, messages, stream_handler)
@@ -157,5 +170,112 @@ async def _complete_streaming(
         "tokens_out": tokens_out,
         "latency_ms": latency_ms,
         "cost_usd": cost,
+    }
+    return content, meta
+
+
+async def _complete_with_tools(
+    kwargs: dict[str, Any],
+    messages: list[dict[str, Any]],
+    tools: list[Tool],
+    max_iterations: int,
+) -> tuple[str, CompletionMeta]:
+    """Multi-turn tool-calling loop.
+
+    Each round sends the current message history to the model. If the model responds with
+    `tool_calls`, each is executed locally via the registered tool's Python function, and
+    the results are appended as `role=tool` messages for the next round. The loop exits
+    when the model answers with plain content (no tool_calls) or after `max_iterations`.
+    Errors from individual tool invocations are captured and fed back as the tool result,
+    so the model can see and react to them.
+    """
+    by_name = {t.name: t for t in tools}
+    kwargs = {**kwargs, "tools": [t.to_openai_schema() for t in tools]}
+
+    recorded: list[dict[str, Any]] = []
+    total_cost = 0.0
+    total_in = 0
+    total_out = 0
+    t0 = time.monotonic()
+    content = ""
+
+    for _ in range(max_iterations):
+        kwargs["messages"] = messages
+        try:
+            resp = await litellm.acompletion(**kwargs)
+        except litellm.exceptions.Timeout as e:
+            raise LLMTimeoutError(str(e)) from e
+        except litellm.exceptions.RateLimitError as e:
+            raise LLMRateLimitError(str(e)) from e
+        except litellm.exceptions.APIError as e:
+            raise LLMError(str(e)) from e
+
+        total_cost += _completion_cost(resp)
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            total_in += getattr(usage, "prompt_tokens", 0) or 0
+            total_out += getattr(usage, "completion_tokens", 0) or 0
+
+        choices = cast(list[Any], getattr(resp, "choices", []))
+        if not choices:
+            raise LLMError("provider returned no choices")
+        msg = choices[0].message
+        content = getattr(msg, "content", None) or ""
+        tool_calls = getattr(msg, "tool_calls", None) or []
+
+        # Record the assistant turn verbatim so the next round has full context. Some
+        # providers reject assistant messages whose content is None — use an empty string.
+        assistant_entry: dict[str, Any] = {"role": "assistant", "content": content}
+        if tool_calls:
+            assistant_entry["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in tool_calls
+            ]
+        messages.append(assistant_entry)
+
+        if not tool_calls:
+            break  # final answer
+
+        for tc in tool_calls:
+            name = tc.function.name
+            args_str = tc.function.arguments or "{}"
+            try:
+                args = json.loads(args_str)
+            except json.JSONDecodeError as e:
+                args, result, error = {}, f"error: invalid JSON arguments: {e}", str(e)
+            else:
+                tool = by_name.get(name)
+                if tool is None:
+                    result, error = f"error: unknown tool {name!r}", f"unknown tool {name!r}"
+                else:
+                    try:
+                        result = str(tool.fn(**args))
+                        error = None
+                    except Exception as e:  # tool crashes are reported back, not raised
+                        result = f"error: {type(e).__name__}: {e}"
+                        error = str(e)
+            recorded.append({"name": name, "arguments": args, "result": result, "error": error})
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "name": name,
+                    "content": result,
+                }
+            )
+
+    meta: CompletionMeta = {
+        "tokens_in": total_in or None,
+        "tokens_out": total_out or None,
+        "latency_ms": int((time.monotonic() - t0) * 1000),
+        "cost_usd": total_cost,
+        "tool_calls_made": recorded,
     }
     return content, meta
