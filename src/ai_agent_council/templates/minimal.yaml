@@ -1,0 +1,48 @@
+# Minimal council per the design brief: 16GB RAM laptop, 5 agents, all-local.
+# The Reasoner doubles as Critic in the critique phase — no separate Critic is
+# rostered, and the validator allows this shape.
+#
+# Models to pull (`docker exec ollama ollama pull …` or `ollama pull …`):
+#   llama3.1:8b        4.7 GB    Ideator — strong generalist, higher temperature
+#   deepseek-r1:7b     4.7 GB    Reasoner — step-by-step analysis, doubles as critic
+#   qwen2.5-coder:7b   4.7 GB    Specialist — domain expert, swap in for coding tasks
+#   gemma3:4b          3.3 GB    Finisher — polish, tool-calling
+#   phi4:14b           9.1 GB    Orchestrator — thin routing + synthesis
+#
+# Families: llama / deepseek / qwen / gemma / phi — five distinct lineages.
+# VRAM tip: set `OLLAMA_MAX_LOADED_MODELS=2` so Ollama swaps on a 12GB GPU.
+
+version: 1
+name: minimal
+
+agents:
+  - name: Muse
+    role: ideator
+    model: ollama/llama3.1:8b
+    temperature: 0.9
+    max_tokens: 1536
+
+  - name: Judge
+    role: reasoner
+    model: ollama/deepseek-r1:7b
+    temperature: 0.4
+    max_tokens: 2048
+
+  - name: Adept
+    role: specialist
+    model: ollama/qwen2.5-coder:7b
+    temperature: 0.5
+    max_tokens: 2048
+
+  - name: Polish
+    role: finisher
+    model: ollama/gemma3:4b
+    temperature: 0.1
+    max_tokens: 1536
+    tools: [current_time, calculate, read_file]
+
+  - name: Scribe
+    role: orchestrator
+    model: ollama/phi4:14b
+    temperature: 0.3
+    max_tokens: 2048

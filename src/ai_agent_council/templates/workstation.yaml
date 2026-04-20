@@ -1,0 +1,57 @@
+# Workstation council per the design brief: 24GB VRAM, 6 agents, all-local.
+# Finisher uses `mistral-small` (the brief offered this or `gemma3:9b`; mistral is the
+# only choice that preserves the cognitive-diversity rule since gemma is already taken
+# by the Ideator).
+#
+# Models to pull:
+#   gemma3:27b           17 GB    Ideator — strong generalist, higher temperature
+#   deepseek-r1:14b       9 GB    Reasoner — reasoning-specialist distillation
+#   qwen2.5-coder:32b    20 GB    Specialist — domain expert for code
+#   phi4:14b              9 GB    Critic — diagnostic, JSON-structured output
+#   mistral-small        14 GB    Finisher — polish, tool-calling, fact-check
+#   gpt-oss:20b          13 GB    Orchestrator — thin integration
+#
+# Families: gemma / deepseek / qwen / phi / mistral / gpt — six distinct.
+# Total disk ~82 GB. Will model-swap on a 24GB GPU; set OLLAMA_MAX_LOADED_MODELS=2.
+
+version: 1
+name: workstation
+
+agents:
+  - name: Muse
+    role: ideator
+    model: ollama/gemma3:27b
+    temperature: 0.9
+    max_tokens: 2048
+
+  - name: Judge
+    role: reasoner
+    model: ollama/deepseek-r1:14b
+    temperature: 0.4
+    max_tokens: 3072
+
+  - name: Adept
+    role: specialist
+    model: ollama/qwen2.5-coder:32b
+    temperature: 0.5
+    max_tokens: 4096
+
+  - name: Hawk
+    role: critic
+    model: ollama/phi4:14b
+    temperature: 0.2
+    max_tokens: 2048
+    json_mode: true
+
+  - name: Polish
+    role: finisher
+    model: ollama/mistral-small
+    temperature: 0.1
+    max_tokens: 3072
+    tools: [current_time, calculate, read_file]
+
+  - name: Scribe
+    role: orchestrator
+    model: ollama/gpt-oss:20b
+    temperature: 0.3
+    max_tokens: 3072

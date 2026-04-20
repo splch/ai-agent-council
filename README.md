@@ -15,7 +15,7 @@ uv sync
 
 ```bash
 # Scaffold a council config from a shipped template
-uv run council init council.yaml --template workstation-4agent
+uv run council init council.yaml --template minimal
 
 # Validate it
 uv run council validate council.yaml
@@ -31,13 +31,18 @@ uv run council run "..." --config council.yaml --stream
 ## Configurations
 
 Three hardware-tier templates ship inside the package
-(`src/ai_agent_council/templates/`) — `council init` copies one out:
+(`src/ai_agent_council/templates/`) — `council init` copies one out. All are fully
+local (no cloud model defaults); the model picks come from the design brief.
 
 | Template | Size | Hardware | Notes |
 |---|---|---|---|
-| `laptop-4agent` | 4 agents | laptop / 8GB VRAM or CPU | all small local models |
-| `workstation-4agent` | 4 agents | 12GB VRAM (e.g. RTX 4070) | local + cloud orchestrator |
-| `server-6agent` | 6 agents | 24GB+ VRAM / multi-GPU | full Belbin roster |
+| `minimal` | 5 agents | 16GB RAM laptop | Reasoner doubles as Critic; small models |
+| `workstation` | 6 agents | 24GB VRAM | full Belbin roster, mid-size models |
+| `power` | 6 agents | 64GB+ unified / multi-GPU | largest variants, full roster |
+
+Each template's header comments list the exact `ollama pull` commands. Families are
+chosen to be pairwise-distinct (gemma / deepseek / qwen / phi / mistral / llama / gpt)
+so the cognitive-diversity rule passes.
 
 ## Design principles (load-bearing)
 
@@ -45,7 +50,7 @@ These are invariants, not conventions:
 
 1. **Size cap 4–8.** Enforced by pydantic validators.
 2. **Cognitive diversity.** No two agents may share a model family (`gemma`, `deepseek`, `phi`,
-   `qwen`, `claude`, `gpt`, …). Violations raise a `ValidationError` at config load.
+   `qwen`, `gpt`, `mistral`, `llama`, …). Violations raise a `ValidationError` at config load.
 3. **Anti-anchoring.** In the divergent phase, each agent's prompt is built from the task
    alone — it *physically cannot* see peer drafts. Enforced by the function signature of
    `render_divergent_prompt(task: str) -> str`, plus a regression test.
@@ -53,6 +58,8 @@ These are invariants, not conventions:
 5. **Explicit permission to disagree.** Baked into every system prompt.
 6. **Temperature varies by role.** Ideator 0.9, Critic 0.2, Finisher 0.1.
 7. **Thin Orchestrator.** Routes and synthesizes; does not produce substantive content.
+8. **Reasoner may double as Critic.** Per the brief's Minimal config — rosters need at
+   least one of a Critic *or* a Reasoner (both participate in the critique phase).
 
 ## Features
 

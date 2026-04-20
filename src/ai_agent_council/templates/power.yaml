@@ -1,0 +1,55 @@
+# Power council per the design brief: 64GB+ unified memory or multi-GPU, 6 agents.
+# Full roster, largest variants, all-local.
+#
+# Models to pull:
+#   gemma3:27b           17 GB    Ideator
+#   deepseek-r1:32b      20 GB    Reasoner
+#   qwen2.5-coder:32b    20 GB    Specialist (swap to qwen3-coder:30b once available)
+#   gpt-oss:20b          13 GB    Critic — different family from Ideator per the rule
+#   mistral-small        14 GB    Finisher — tool-calling capable
+#   llama3.3:70b         43 GB    Orchestrator — strongest local generalist
+#
+# Families: gemma / deepseek / qwen / gpt / mistral / llama — six distinct.
+# Total disk ~127 GB.
+
+version: 1
+name: power
+
+agents:
+  - name: Muse
+    role: ideator
+    model: ollama/gemma3:27b
+    temperature: 0.9
+    max_tokens: 2048
+
+  - name: Judge
+    role: reasoner
+    model: ollama/deepseek-r1:32b
+    temperature: 0.4
+    max_tokens: 4096
+
+  - name: Adept
+    role: specialist
+    model: ollama/qwen2.5-coder:32b
+    temperature: 0.5
+    max_tokens: 4096
+
+  - name: Hawk
+    role: critic
+    model: ollama/gpt-oss:20b
+    temperature: 0.2
+    max_tokens: 2048
+    json_mode: true
+
+  - name: Polish
+    role: finisher
+    model: ollama/mistral-small
+    temperature: 0.1
+    max_tokens: 3072
+    tools: [current_time, calculate, read_file]
+
+  - name: Scribe
+    role: orchestrator
+    model: ollama/llama3.3:70b
+    temperature: 0.3
+    max_tokens: 3072

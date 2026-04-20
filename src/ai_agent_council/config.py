@@ -89,8 +89,11 @@ class CouncilConfig(BaseModel):
             raise ValueError(f"exactly one orchestrator required; found {len(orchestrators)}")
         if Role.IDEATOR not in roles:
             raise ValueError("roster must include at least one ideator")
-        if Role.CRITIC not in roles:
-            raise ValueError("roster must include at least one critic")
+        # The critique phase enlists Critic + Reasoner as reviewers. Allow rosters that
+        # only have a Reasoner — matches the design brief's "Minimal (laptop)" where the
+        # Reasoner doubles as Critic for compute reasons.
+        if Role.CRITIC not in roles and Role.REASONER not in roles:
+            raise ValueError("roster must include at least one critic or reasoner")
 
         families: dict[str, str] = {}
         for a in self.agents:

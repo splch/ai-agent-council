@@ -31,9 +31,9 @@ _err = Console(stderr=True)
 _TEMPLATE_PACKAGE = "ai_agent_council.templates"
 
 AVAILABLE_TEMPLATES = (
-    "laptop-4agent",
-    "workstation-4agent",
-    "server-6agent",
+    "minimal",
+    "workstation",
+    "power",
 )
 
 
@@ -164,7 +164,7 @@ def init(
             "-t",
             help=f"One of: {', '.join(AVAILABLE_TEMPLATES)}",
         ),
-    ] = "workstation-4agent",
+    ] = "minimal",
     force: Annotated[
         bool,
         typer.Option("--force", "-f", help="Overwrite an existing file at the target path."),

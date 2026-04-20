@@ -75,25 +75,44 @@ def test_rejects_two_orchestrators() -> None:
         )
 
 
-def test_requires_ideator_and_critic() -> None:
+def test_requires_ideator() -> None:
     with pytest.raises(ValidationError, match="ideator"):
         CouncilConfig(
             agents=[
                 _agent("A", Role.REASONER, "ollama/llama3.1:8b"),
                 _agent("B", Role.CRITIC, "ollama/phi4-mini:3.8b"),
                 _agent("C", Role.FINISHER, "ollama/mistral-small"),
-                _agent("D", Role.ORCHESTRATOR, "anthropic/claude-haiku-4-5-20251001"),
+                _agent("D", Role.ORCHESTRATOR, "ollama/gpt-oss:20b"),
             ],
         )
-    with pytest.raises(ValidationError, match="critic"):
+
+
+def test_requires_critic_or_reasoner() -> None:
+    """Rosters without either a Critic or Reasoner have no one to run the critique phase.
+    The Minimal config in the design brief uses a Reasoner alone (doubles as Critic);
+    both are fine — but at least one must be present."""
+    with pytest.raises(ValidationError, match="critic or reasoner"):
         CouncilConfig(
             agents=[
                 _agent("A", Role.IDEATOR, "ollama/llama3.1:8b"),
-                _agent("B", Role.REASONER, "ollama/phi4-mini:3.8b"),
+                _agent("B", Role.SPECIALIST, "ollama/phi4-mini:3.8b"),
                 _agent("C", Role.FINISHER, "ollama/mistral-small"),
-                _agent("D", Role.ORCHESTRATOR, "anthropic/claude-haiku-4-5-20251001"),
+                _agent("D", Role.ORCHESTRATOR, "ollama/gpt-oss:20b"),
             ],
         )
+
+
+def test_reasoner_without_critic_is_allowed() -> None:
+    """Brief's Minimal config: Reasoner doubles as Critic, no separate Critic rostered."""
+    cfg = CouncilConfig(
+        agents=[
+            _agent("Muse", Role.IDEATOR, "ollama/llama3.1:8b"),
+            _agent("Judge", Role.REASONER, "ollama/deepseek-r1:7b"),
+            _agent("Polish", Role.FINISHER, "ollama/gemma3:4b"),
+            _agent("Scribe", Role.ORCHESTRATOR, "ollama/phi4:14b"),
+        ],
+    )
+    assert len(cfg.agents) == 4
 
 
 def test_rejects_duplicate_names() -> None:
@@ -192,7 +211,7 @@ def test_load_council_config_missing_file(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize(
     "template",
-    ["laptop-4agent.yaml", "workstation-4agent.yaml", "server-6agent.yaml"],
+    ["minimal.yaml", "workstation.yaml", "power.yaml"],
 )
 def test_shipped_templates_are_valid(template: str) -> None:
     """Every shipped template must validate — this is a smoke test for diversity rule too."""

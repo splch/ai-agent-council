@@ -14,18 +14,18 @@ from ai_agent_council.council import Council
 pytestmark = pytest.mark.integration
 
 RUN_IT = os.environ.get("COUNCIL_OLLAMA_IT") == "1"
-_LAPTOP_CFG = (
+_MINIMAL_CFG = (
     Path(__file__).resolve().parent.parent
     / "src"
     / "ai_agent_council"
     / "templates"
-    / "laptop-4agent.yaml"
+    / "minimal.yaml"
 )
 
 
 @pytest.mark.skipif(not RUN_IT, reason="set COUNCIL_OLLAMA_IT=1 to run")
-async def test_laptop_config_runs_against_live_ollama() -> None:
-    council = Council(load_council_config(_LAPTOP_CFG))
+async def test_minimal_config_runs_against_live_ollama() -> None:
+    council = Council(load_council_config(_MINIMAL_CFG))
     result = await council.run("Reply with the word 'ok' and nothing else.")
     assert result.final_answer
     assert len(result.phases) >= 4
