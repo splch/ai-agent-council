@@ -114,21 +114,32 @@ def test_read_file_rejects_directory(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert out.startswith("error:")
 
 
-def test_register_is_idempotent_for_same_name() -> None:
-    """Registering under an existing name replaces the prior entry (useful for tests)."""
-    custom = tools.Tool(
-        name="__test_override__",
+def _make_dummy(name: str, value: str) -> tools.Tool:
+    return tools.Tool(
+        name=name,
         description="test",
         parameters_schema={"type": "object", "properties": {}, "required": []},
-        fn=lambda: "first",
+        fn=lambda: value,
     )
-    tools.register(custom)
-    assert tools.get("__test_override__").fn() == "first"
-    replacement = tools.Tool(
-        name="__test_override__",
-        description="test",
-        parameters_schema={"type": "object", "properties": {}, "required": []},
-        fn=lambda: "second",
-    )
-    tools.register(replacement)
-    assert tools.get("__test_override__").fn() == "second"
+
+
+def test_register_refuses_to_overwrite_by_default() -> None:
+    """Same-name registration fails fast — the common 'I named my tool the same as a
+    built-in' typo would otherwise silently clobber it."""
+    tools.register(_make_dummy("__test_dup__", "first"))
+    try:
+        with pytest.raises(ValueError, match="already registered"):
+            tools.register(_make_dummy("__test_dup__", "second"))
+        # original registration is intact
+        assert tools.get("__test_dup__").fn() == "first"
+    finally:
+        tools._REGISTRY.pop("__test_dup__", None)
+
+
+def test_register_with_overwrite_replaces() -> None:
+    tools.register(_make_dummy("__test_replace__", "first"))
+    try:
+        tools.register(_make_dummy("__test_replace__", "second"), overwrite=True)
+        assert tools.get("__test_replace__").fn() == "second"
+    finally:
+        tools._REGISTRY.pop("__test_replace__", None)

@@ -52,6 +52,9 @@ class AgentConfig(BaseModel):
     # Names of tools from ai_agent_council.tools the agent may call during its turn. Only
     # the Finisher uses tools in the shipped templates, but any role can opt in.
     tools: list[str] = Field(default_factory=list)
+    # Cap on the model's tool-call loop. After this many LLM rounds without a plain-content
+    # answer, the loop exits with whatever content came last.
+    max_tool_iterations: int = Field(default=5, ge=1, le=20)
 
     @property
     def family(self) -> str:

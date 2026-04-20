@@ -55,6 +55,7 @@ class Agent:
                 json_mode=cfg.json_mode,
                 stream_handler=stream_handler,
                 tools=self.tools or None,
+                max_tool_iterations=cfg.max_tool_iterations,
             )
             return Message(
                 role=cfg.role,

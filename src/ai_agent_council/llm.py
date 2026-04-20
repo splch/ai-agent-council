@@ -67,6 +67,10 @@ async def complete(
     tool invocations, which are executed locally and fed back for up to
     `max_tool_iterations` rounds before the final content is returned. Streaming is not
     combined with tool-calling in this release — if both are requested, tool-calling wins
+
+    Retry note: the @retry wraps the *whole* function, so a timeout in round 3 of a tool
+    loop restarts the loop from round 0. That's arguably the right semantics (the
+    provider's conversation state is gone) but it re-pays the cost of earlier rounds.
     and the stream_handler is ignored.
 
     Raises `LLMError` (or subclass) on failure. Retries timeouts and rate-limits with

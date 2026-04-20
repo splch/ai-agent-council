@@ -52,8 +52,14 @@ class Tool:
 _REGISTRY: dict[str, Tool] = {}
 
 
-def register(tool: Tool) -> Tool:
-    """Add a tool to the process-wide registry. Returns the tool for chaining."""
+def register(tool: Tool, *, overwrite: bool = False) -> Tool:
+    """Add a tool to the process-wide registry. Returns the tool for chaining.
+
+    Refuses by default to overwrite an existing name — this catches the "user registers
+    a custom tool whose name happens to match a built-in" typo class. Pass
+    `overwrite=True` to replace intentionally (tests, hot-reload workflows)."""
+    if not overwrite and tool.name in _REGISTRY:
+        raise ValueError(f"tool {tool.name!r} already registered; pass overwrite=True to replace")
     _REGISTRY[tool.name] = tool
     return tool
 
