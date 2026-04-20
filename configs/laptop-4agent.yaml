@@ -1,0 +1,40 @@
+# Laptop-class council: 4 agents, all local, small models.
+# Fits ~8GB VRAM or CPU-only. Expect slow but complete runs on CPU.
+#
+# Before running:
+#   ollama pull gemma3:2b
+#   ollama pull deepseek-r1:1.5b
+#   ollama pull phi4-mini:3.8b
+#   ollama pull llama3.2:3b
+#
+# Cognitive-diversity check: gemma / deepseek / phi / llama — four distinct families.
+
+version: 1
+name: laptop-4agent
+midpoint_reset: false
+
+agents:
+  - name: Muse
+    role: ideator
+    model: ollama/gemma3:2b
+    temperature: 0.9
+    max_tokens: 1024
+
+  - name: Judge
+    role: reasoner
+    model: ollama/deepseek-r1:1.5b
+    temperature: 0.4
+    max_tokens: 1536
+
+  - name: Hawk
+    role: critic
+    model: ollama/phi4-mini:3.8b
+    temperature: 0.2
+    max_tokens: 1024
+    json_mode: true
+
+  - name: Scribe
+    role: orchestrator
+    model: ollama/llama3.2:3b
+    temperature: 0.3
+    max_tokens: 1536

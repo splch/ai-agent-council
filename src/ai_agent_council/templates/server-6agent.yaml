@@ -1,0 +1,59 @@
+# Server-class council: full 6-agent Belbin roster on larger models.
+# Target hardware: 24GB+ VRAM, or multi-GPU, or Apple Silicon with unified memory ≥48GB.
+#
+# Before running:
+#   ollama pull gemma3:27b
+#   ollama pull deepseek-r1:32b
+#   ollama pull qwen2.5-coder:32b
+#   ollama pull phi4:14b
+#   ollama pull mistral-small
+#   ollama pull llama3.3:70b   # or swap orchestrator for a cloud model, see below
+#
+# Cognitive-diversity check:
+#   gemma / deepseek / qwen / phi / mistral / llama — six distinct families.
+#
+# Alternate orchestrator for hybrid-cloud setups (swap the Scribe entry):
+#   model: anthropic/claude-sonnet-4-6
+#   (family: claude — still distinct from the other five, so diversity is preserved)
+
+version: 1
+name: server-6agent
+midpoint_reset: true
+
+agents:
+  - name: Muse
+    role: ideator
+    model: ollama/gemma3:27b
+    temperature: 0.9
+    max_tokens: 2048
+
+  - name: Judge
+    role: reasoner
+    model: ollama/deepseek-r1:32b
+    temperature: 0.4
+    max_tokens: 4096
+
+  - name: Adept
+    role: specialist
+    model: ollama/qwen2.5-coder:32b
+    temperature: 0.5
+    max_tokens: 4096
+
+  - name: Hawk
+    role: critic
+    model: ollama/phi4:14b
+    temperature: 0.2
+    max_tokens: 2048
+    json_mode: true
+
+  - name: Polish
+    role: finisher
+    model: ollama/mistral-small
+    temperature: 0.1
+    max_tokens: 3072
+
+  - name: Scribe
+    role: orchestrator
+    model: ollama/llama3.3:70b
+    temperature: 0.3
+    max_tokens: 3072

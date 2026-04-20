@@ -1,0 +1,100 @@
+[project]
+name = "ai-agent-council"
+version = "0.1.0"
+description = "A Belbin-roles multi-agent council implementing the Braintrust workflow with cognitive diversity across model families."
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT" }
+authors = [{ name = "Spencer" }]
+keywords = ["llm", "multi-agent", "ollama", "litellm", "braintrust", "belbin"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "litellm>=1.53",
+    "pydantic>=2.9",
+    "pyyaml>=6.0.2",
+    "typer>=0.14",
+    "rich>=13.9",
+    "tenacity>=9.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "ty>=0.0.1a0",
+]
+
+[project.scripts]
+council = "ai_agent_council.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_agent_council"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/ai_agent_council",
+    "configs",
+    "README.md",
+    "pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+    "N",   # pep8-naming
+    "C4",  # flake8-comprehensions
+    "PT",  # pytest style
+]
+ignore = [
+    "E501", # handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B008"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty.src]
+include = ["src", "tests"]
+
+[tool.ty.rules]
+possibly-missing-attribute = "warn"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: integration tests requiring external services",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+    "ty>=0.0.1a0",
+]
