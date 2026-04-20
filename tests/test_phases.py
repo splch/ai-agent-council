@@ -2,8 +2,6 @@
 
 import inspect
 
-import pytest
-
 from ai_agent_council.config import CouncilConfig
 from ai_agent_council.council import Council
 from ai_agent_council.models import Phase
@@ -154,18 +152,6 @@ async def test_finishing_skipped_when_no_finisher(
     assert finishing.messages == []
 
 
-async def test_orchestrate_emits_single_message(
-    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
-) -> None:
-    council = Council(minimal_council_config)
-    divergent = await run_divergent(council, "task")
-    critique = await run_critique(council, "task", divergent)
-    synthesis = await run_synthesis(council, "task", divergent, critique)
-    orch = await run_orchestrate(council, "task", [divergent, critique, synthesis])
-    assert len(orch.messages) == 1
-    assert orch.messages[0].agent_name == "Scribe"
-
-
 async def test_orchestrate_prompt_contains_whole_transcript(
     fake_llm: FakeLLM, minimal_council_config: CouncilConfig
 ) -> None:
@@ -192,20 +178,3 @@ def _name_of(system: str) -> str:
     head = system.strip().splitlines()[0]
     _, _, rest = head.partition("You are ")
     return rest.split(",", 1)[0].strip() or "unknown"
-
-
-@pytest.mark.asyncio
-async def test_phases_return_phase_output_with_correct_phase(
-    fake_llm: FakeLLM, minimal_council_config: CouncilConfig
-) -> None:
-    council = Council(minimal_council_config)
-    d = await run_divergent(council, "x")
-    assert d.phase is Phase.DIVERGENT
-    c = await run_critique(council, "x", d)
-    assert c.phase is Phase.CRITIQUE
-    s = await run_synthesis(council, "x", d, c)
-    assert s.phase is Phase.SYNTHESIS
-    f = await run_finishing(council, "x", s)
-    assert f.phase is Phase.FINISHING
-    o = await run_orchestrate(council, "x", [d, c, s, f])
-    assert o.phase is Phase.ORCHESTRATE

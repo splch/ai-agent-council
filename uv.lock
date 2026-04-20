@@ -2,9 +2,6 @@ version = 1
 revision = 3
 requires-python = ">=3.14"
 
-[options]
-prerelease-mode = "allow"
-
 [[package]]
 name = "ai-agent-council"
 version = "0.1.0"

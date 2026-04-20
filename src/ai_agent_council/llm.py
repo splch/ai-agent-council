@@ -64,8 +64,8 @@ async def complete(
         raise LLMRateLimitError(str(e)) from e
     except litellm.exceptions.APIError as e:
         raise LLMError(str(e)) from e
-    except Exception as e:
-        raise LLMError(f"{type(e).__name__}: {e}") from e
+    # Non-litellm exceptions (TypeError, CancelledError, …) propagate — those are
+    # programming bugs or cooperative cancellation, not LLM errors.
 
     latency_ms = int((time.monotonic() - t0) * 1000)
 

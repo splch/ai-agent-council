@@ -45,17 +45,20 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-    "SIM", # flake8-simplify
-    "RUF", # ruff-specific
-    "N",   # pep8-naming
-    "C4",  # flake8-comprehensions
-    "PT",  # pytest style
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # isort
+    "B",     # flake8-bugbear
+    "UP",    # pyupgrade
+    "SIM",   # flake8-simplify
+    "RUF",   # ruff-specific
+    "N",     # pep8-naming
+    "C4",    # flake8-comprehensions
+    "PT",    # pytest style
+    "FA",    # flake8-future-annotations — flag redundant `from __future__ import annotations`
+    "ASYNC", # flake8-async — blocking calls in async, gather vs TaskGroup
+    "PERF",  # Perflint
 ]
 ignore = [
     "E501", # handled by formatter

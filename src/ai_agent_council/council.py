@@ -1,6 +1,7 @@
 """Council: the public entry point. Orchestrates the Braintrust loop."""
 
 import contextlib
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,10 +20,12 @@ class Council:
 
     def __init__(self, config: CouncilConfig) -> None:
         self.config = config
-        self.agents: dict[str, Agent] = {cfg.name: Agent.from_config(cfg) for cfg in config.agents}
-        self.by_role: dict[Role, list[Agent]] = {}
-        for agent in self.agents.values():
-            self.by_role.setdefault(agent.config.role, []).append(agent)
+        self.agents: dict[str, Agent] = {}
+        self.by_role: defaultdict[Role, list[Agent]] = defaultdict(list)
+        for cfg in config.agents:
+            agent = Agent.from_config(cfg)
+            self.agents[cfg.name] = agent
+            self.by_role[cfg.role].append(agent)
 
     @classmethod
     def from_yaml(cls, path: Path | str) -> Self:
