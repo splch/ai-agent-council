@@ -19,6 +19,7 @@ from .prompts import (
     render_divergent_prompt,
     render_finishing_prompt,
     render_orchestrate_prompt,
+    render_restate_prompt,
     render_retrospective_prompt,
     render_synthesis_prompt,
 )
@@ -55,6 +56,38 @@ async def _run_concurrently(
     async with asyncio.TaskGroup() as tg:
         tasks = [tg.create_task(c) for c in coros]
     return [t.result() for t in tasks]
+
+
+async def run_restate(
+    council: Council, task: str, *, tokens: TokenStream | None = None
+) -> PhaseOutput:
+    """Restate phase. Every council member independently restates the task plus one
+    alternative framing. Per the anti-anchoring rule, each agent receives the same
+    isolated prompt — they don't see each other's restatements. The transcript makes
+    divergent interpretations visible to a human reviewer.
+    """
+    members = list(council.agents.values())
+    # Orchestrator skipped — its job is synthesis, not interpretation.
+    members = [a for a in members if a.config.role is not Role.ORCHESTRATOR]
+    if not members:
+        return PhaseOutput(phase=Phase.RESTATE, messages=[], elapsed_ms=0)
+    user_prompt = render_restate_prompt(task)
+    t0 = time.monotonic()
+    messages = await _run_concurrently(
+        [
+            a.respond(
+                user_prompt,
+                phase=Phase.RESTATE,
+                stream_handler=_handler_for(tokens, a.config.name),
+            )
+            for a in members
+        ]
+    )
+    return PhaseOutput(
+        phase=Phase.RESTATE,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
 
 
 async def run_divergent(

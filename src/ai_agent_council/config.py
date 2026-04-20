@@ -75,6 +75,12 @@ class CouncilConfig(BaseModel):
     retrospective: bool = False
     retrospective_dir: Path | None = None
     retrospective_recall: int = Field(default=5, ge=0, le=50)
+    # When true, insert a restate phase BEFORE divergent: every agent independently
+    # restates the task in their own words and proposes one alternative framing. If
+    # the restatements materially diverge, the question itself was probably ambiguous —
+    # surfaced via the transcript for human review. Research catches ~20% of tasks
+    # where the user asked the wrong question.
+    restate: bool = False
 
     @model_validator(mode="after")
     def _validate_roster(self) -> Self:

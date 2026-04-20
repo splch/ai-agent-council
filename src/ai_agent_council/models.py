@@ -20,6 +20,7 @@ class Role(StrEnum):
 class Phase(StrEnum):
     """Braintrust workflow phases, in canonical order."""
 
+    RESTATE = "restate"
     DIVERGENT = "divergent"
     CRITIQUE = "critique"
     SYNTHESIS = "synthesis"

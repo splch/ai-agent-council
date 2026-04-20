@@ -244,6 +244,27 @@ def render_role_prompt(role: Role, name: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def render_restate_prompt(task: str) -> str:
+    """Build the restate-phase user prompt.
+
+    Pure function of the task — every agent restates in isolation, same as divergent.
+    The signature enforces this by not accepting peer output.
+    """
+    return (
+        "Before the council begins deliberation, restate the task in your own words.\n\n"
+        "Task as given:\n"
+        f"{task.strip()}\n\n"
+        "Do two things, briefly:\n"
+        "  1. Your one-sentence restatement of what the user is actually asking for.\n"
+        "  2. One plausible alternative framing — what else could they mean?\n\n"
+        "Format:\n"
+        "  RESTATE: <one sentence>\n"
+        "  ALT: <one sentence>\n\n"
+        "If the task is genuinely unambiguous, say so in ALT. Do not speculate about the "
+        "rest of the council's work; this phase is restatement only."
+    )
+
+
 def render_divergent_prompt(task: str) -> str:
     """Build the divergent-phase user prompt.
 

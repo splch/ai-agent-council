@@ -56,15 +56,20 @@ class Council:
     ) -> CouncilResult:
         """Run the council end-to-end on `task`.
 
-        Phase order: divergent → critique → synthesis → [finishing] → orchestrate →
-        [retrospective]. Each completed phase is passed to `stream` if given, before the
-        next begins. Each token chunk is passed to `tokens(agent_name, chunk)` as it
-        arrives, for callers that want to render live token streams. The retrospective
-        phase runs only when `config.retrospective` is true; when it does, its lessons
-        are appended to `<retrospective_dir>/<council_name>.jsonl`.
+        Phase order: [restate] → divergent → critique → synthesis → [finishing] →
+        orchestrate → [retrospective]. Optional phases run only when their config flag
+        is set. Each completed phase is passed to `stream` if given, before the next
+        begins. Each token chunk is passed to `tokens(agent_name, chunk)` as it
+        arrives, for callers that want to render live token streams. Retrospective
+        lessons are appended to `<retrospective_dir>/<council_name>.jsonl` when enabled.
         """
         started = datetime.now(UTC)
         phases_run: list[PhaseOutput] = []
+
+        if self.config.restate:
+            restate = await phases_mod.run_restate(self, task, tokens=tokens)
+            _emit(stream, restate)
+            phases_run.append(restate)
 
         divergent = await phases_mod.run_divergent(self, task, tokens=tokens)
         _emit(stream, divergent)
