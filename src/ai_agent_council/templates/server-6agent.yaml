@@ -19,6 +19,13 @@
 version: 1
 name: server-6agent
 
+# Uncomment to enable the retrospective loop: after each run, the Critic emits
+# 1-3 lessons which are appended to `~/.local/share/ai_agent_council/retrospectives/
+# server-6agent.jsonl` and re-injected into every agent's system prompt on the next
+# run. Opt-in because it creates durable disk state under your home directory.
+# retrospective: true
+# retrospective_recall: 5
+
 agents:
   - name: Muse
     role: ideator

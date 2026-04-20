@@ -65,7 +65,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["B008"]
+# B008: pytest fixtures often look like mutable defaults.
+# ASYNC240: test setup frequently touches sync paths inside async test functions; fine.
+"tests/*" = ["B008", "ASYNC240"]
 
 [tool.ruff.format]
 quote-style = "double"

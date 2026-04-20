@@ -264,3 +264,47 @@ def render_orchestrate_prompt(task: str, phases_so_far: list[PhaseOutput]) -> st
         parts.append("")
     parts.append("Output the final user-facing answer.")
     return "\n".join(parts)
+
+
+def render_retrospective_prompt(task: str, phases_so_far: list[PhaseOutput]) -> str:
+    """Build the retrospective prompt. Used by the Critic after delivery."""
+    parts: list[str] = [
+        "You have just finished a council run. Here is the task and the full transcript:",
+        "",
+        "Task:",
+        task.strip(),
+        "",
+    ]
+    for ph in phases_so_far:
+        parts.append(f"### Phase: {ph.phase.value}")
+        for m in ph.messages:
+            header = f"[{m.agent_name} ({m.role.value})]"
+            if m.error:
+                parts.append(f"{header} FAILED: {m.error}")
+            else:
+                parts.append(header)
+                parts.append(m.content.strip() or "(empty)")
+        parts.append("")
+    parts.extend(
+        [
+            "Identify 1 to 3 concrete, actionable lessons that would improve the next run of "
+            "a similar task. Be specific (point to a phase, a prompt, or a behaviour). "
+            "Avoid generic advice like 'be more careful'.",
+            "",
+            'Output JSON: {"lessons": ["<lesson 1>", "<lesson 2>", ...]}. One sentence each.',
+        ]
+    )
+    return "\n".join(parts)
+
+
+def render_lessons_block(lessons: list[str]) -> str:
+    """Format recalled lessons as a system-prompt footer. Returns '' when empty."""
+    if not lessons:
+        return ""
+    items = "\n".join(f"    * {lesson.strip()}" for lesson in lessons if lesson.strip())
+    if not items:
+        return ""
+    return (
+        "Recent lessons from prior runs of this council — apply when relevant, override "
+        "when not:\n" + items
+    )

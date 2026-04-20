@@ -71,6 +71,12 @@ class CouncilConfig(BaseModel):
     version: int = 1
     name: str = "default-council"
     agents: list[AgentConfig] = Field(min_length=4, max_length=8)
+    # When true, the Council runs a retrospective phase after delivery, appending lessons
+    # to `<retrospective_dir>/<name>.jsonl`, and loads up to `retrospective_recall` recent
+    # entries into each agent's system prompt on construction.
+    retrospective: bool = False
+    retrospective_dir: Path | None = None
+    retrospective_recall: int = Field(default=5, ge=0, le=50)
 
     @model_validator(mode="after")
     def _validate_roster(self) -> Self:

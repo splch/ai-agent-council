@@ -19,6 +19,7 @@ from .prompts import (
     render_divergent_prompt,
     render_finishing_prompt,
     render_orchestrate_prompt,
+    render_retrospective_prompt,
     render_synthesis_prompt,
 )
 
@@ -170,3 +171,29 @@ async def run_orchestrate(
         stream_handler=_handler_for(tokens, orchestrator.config.name),
     )
     return PhaseOutput(phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=_elapsed_ms(t0))
+
+
+async def run_retrospective(
+    council: Council,
+    task: str,
+    phases_so_far: list[PhaseOutput],
+    *,
+    tokens: TokenStream | None = None,
+) -> PhaseOutput:
+    """Retrospective phase. The Critic reads the transcript and extracts 1-3 lessons for
+    future runs. No-op (empty output) if no Critic is rostered — the config validator
+    requires one, so this fallback is defensive, not expected."""
+    critics = council.by_role.get(Role.CRITIC, [])
+    if not critics:
+        return PhaseOutput(phase=Phase.RETROSPECTIVE, messages=[], elapsed_ms=0)
+    critic = critics[0]
+    prompt = render_retrospective_prompt(task, phases_so_far)
+    t0 = time.monotonic()
+    msg = await critic.respond(
+        prompt,
+        phase=Phase.RETROSPECTIVE,
+        stream_handler=_handler_for(tokens, critic.config.name),
+    )
+    return PhaseOutput(
+        phase=Phase.RETROSPECTIVE, messages=[msg], elapsed_ms=_elapsed_ms(t0)
+    )
