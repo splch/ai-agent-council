@@ -5,7 +5,6 @@ import `litellm` directly — this is the seam for tests (monkeypatched with a F
 """
 
 import json
-import time
 from collections.abc import Callable
 from typing import Any, cast
 
@@ -17,6 +16,7 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from ._timing import elapsed_ms
 from .exceptions import LLMError, LLMRateLimitError, LLMTimeoutError
 from .tools import Tool
 
@@ -112,13 +112,11 @@ async def complete(
     if stream_handler is not None:
         return await _complete_streaming(kwargs, messages, stream_handler)
 
-    t0 = time.monotonic()
-    try:
-        resp = await litellm.acompletion(**kwargs)
-    except Exception as e:
-        raise _wrap_litellm_error(e) from e
-
-    latency_ms = int((time.monotonic() - t0) * 1000)
+    with elapsed_ms() as ms:
+        try:
+            resp = await litellm.acompletion(**kwargs)
+        except Exception as e:
+            raise _wrap_litellm_error(e) from e
 
     choices = cast(list[Any], getattr(resp, "choices", []))
     if not choices:
@@ -129,7 +127,7 @@ async def complete(
     meta: CompletionMeta = {
         "tokens_in": getattr(usage, "prompt_tokens", None) if usage else None,
         "tokens_out": getattr(usage, "completion_tokens", None) if usage else None,
-        "latency_ms": latency_ms,
+        "latency_ms": ms(),
         "cost_usd": _completion_cost(resp),
     }
     return content, meta
@@ -145,30 +143,29 @@ async def _complete_streaming(
     `litellm.stream_chunk_builder`; when the provider doesn't give usage back, cost is 0.
     """
     kwargs = {**kwargs, "stream": True, "stream_options": {"include_usage": True}}
-    t0 = time.monotonic()
-    try:
-        resp_stream = await litellm.acompletion(**kwargs)
-    except Exception as e:
-        raise _wrap_litellm_error(e) from e
+    with elapsed_ms() as ms:
+        try:
+            resp_stream = await litellm.acompletion(**kwargs)
+        except Exception as e:
+            raise _wrap_litellm_error(e) from e
 
-    chunks: list[Any] = []
-    parts: list[str] = []
-    tokens_in: int | None = None
-    tokens_out: int | None = None
-    async for chunk in resp_stream:
-        chunks.append(chunk)
-        choices = getattr(chunk, "choices", None) or []
-        if choices:
-            delta = getattr(choices[0].delta, "content", None)
-            if delta:
-                parts.append(delta)
-                on_token(delta)
-        usage = getattr(chunk, "usage", None)
-        if usage is not None:
-            tokens_in = getattr(usage, "prompt_tokens", tokens_in) or tokens_in
-            tokens_out = getattr(usage, "completion_tokens", tokens_out) or tokens_out
+        chunks: list[Any] = []
+        parts: list[str] = []
+        tokens_in: int | None = None
+        tokens_out: int | None = None
+        async for chunk in resp_stream:
+            chunks.append(chunk)
+            choices = getattr(chunk, "choices", None) or []
+            if choices:
+                delta = getattr(choices[0].delta, "content", None)
+                if delta:
+                    parts.append(delta)
+                    on_token(delta)
+            usage = getattr(chunk, "usage", None)
+            if usage is not None:
+                tokens_in = getattr(usage, "prompt_tokens", tokens_in) or tokens_in
+                tokens_out = getattr(usage, "completion_tokens", tokens_out) or tokens_out
 
-    latency_ms = int((time.monotonic() - t0) * 1000)
     content = "".join(parts)
     try:
         assembled = litellm.stream_chunk_builder(chunks, messages=messages)
@@ -178,7 +175,7 @@ async def _complete_streaming(
     meta: CompletionMeta = {
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
-        "latency_ms": latency_ms,
+        "latency_ms": ms(),
         "cost_usd": cost,
     }
     return content, meta
@@ -206,81 +203,83 @@ async def _complete_with_tools(
     total_cost = 0.0
     total_in = 0
     total_out = 0
-    t0 = time.monotonic()
     content = ""
 
-    for _ in range(max_iterations):
-        kwargs["messages"] = messages
-        try:
-            resp = await litellm.acompletion(**kwargs)
-        except Exception as e:
-            raise _wrap_litellm_error(e) from e
-
-        total_cost += _completion_cost(resp)
-        usage = getattr(resp, "usage", None)
-        if usage is not None:
-            total_in += getattr(usage, "prompt_tokens", 0) or 0
-            total_out += getattr(usage, "completion_tokens", 0) or 0
-
-        choices = cast(list[Any], getattr(resp, "choices", []))
-        if not choices:
-            raise LLMError("provider returned no choices")
-        msg = choices[0].message
-        content = getattr(msg, "content", None) or ""
-        tool_calls = getattr(msg, "tool_calls", None) or []
-
-        # Record the assistant turn verbatim so the next round has full context. Some
-        # providers reject assistant messages whose content is None — use an empty string.
-        assistant_entry: dict[str, Any] = {"role": "assistant", "content": content}
-        if tool_calls:
-            assistant_entry["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in tool_calls
-            ]
-        messages.append(assistant_entry)
-
-        if not tool_calls:
-            break  # final answer
-
-        for tc in tool_calls:
-            name = tc.function.name
-            args_str = tc.function.arguments or "{}"
+    with elapsed_ms() as ms:
+        for _ in range(max_iterations):
+            kwargs["messages"] = messages
             try:
-                args = json.loads(args_str)
-            except json.JSONDecodeError as e:
-                args, result, error = {}, f"error: invalid JSON arguments: {e}", str(e)
-            else:
-                tool = by_name.get(name)
-                if tool is None:
-                    result, error = f"error: unknown tool {name!r}", f"unknown tool {name!r}"
+                resp = await litellm.acompletion(**kwargs)
+            except Exception as e:
+                raise _wrap_litellm_error(e) from e
+
+            total_cost += _completion_cost(resp)
+            usage = getattr(resp, "usage", None)
+            if usage is not None:
+                total_in += getattr(usage, "prompt_tokens", 0) or 0
+                total_out += getattr(usage, "completion_tokens", 0) or 0
+
+            choices = cast(list[Any], getattr(resp, "choices", []))
+            if not choices:
+                raise LLMError("provider returned no choices")
+            msg = choices[0].message
+            content = getattr(msg, "content", None) or ""
+            tool_calls = getattr(msg, "tool_calls", None) or []
+
+            # Record the assistant turn verbatim so the next round has full context. Some
+            # providers reject assistant messages whose content is None — use an empty string.
+            assistant_entry: dict[str, Any] = {"role": "assistant", "content": content}
+            if tool_calls:
+                assistant_entry["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in tool_calls
+                ]
+            messages.append(assistant_entry)
+
+            if not tool_calls:
+                break  # final answer
+
+            for tc in tool_calls:
+                name = tc.function.name
+                args_str = tc.function.arguments or "{}"
+                try:
+                    args = json.loads(args_str)
+                except json.JSONDecodeError as e:
+                    args, result, error = {}, f"error: invalid JSON arguments: {e}", str(e)
                 else:
-                    try:
-                        result = str(tool.fn(**args))
-                        error = None
-                    except Exception as e:  # tool crashes are reported back, not raised
-                        result = f"error: {type(e).__name__}: {e}"
-                        error = str(e)
-            recorded.append({"name": name, "arguments": args, "result": result, "error": error})
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "name": name,
-                    "content": result,
-                }
-            )
+                    tool = by_name.get(name)
+                    if tool is None:
+                        result, error = f"error: unknown tool {name!r}", f"unknown tool {name!r}"
+                    else:
+                        try:
+                            result = str(tool.fn(**args))
+                            error = None
+                        except Exception as e:  # tool crashes are reported back, not raised
+                            result = f"error: {type(e).__name__}: {e}"
+                            error = str(e)
+                recorded.append(
+                    {"name": name, "arguments": args, "result": result, "error": error}
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "name": name,
+                        "content": result,
+                    }
+                )
 
     meta: CompletionMeta = {
         "tokens_in": total_in or None,
         "tokens_out": total_out or None,
-        "latency_ms": int((time.monotonic() - t0) * 1000),
+        "latency_ms": ms(),
         "cost_usd": total_cost,
         "tool_calls_made": recorded,
     }

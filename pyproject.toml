@@ -59,6 +59,7 @@ select = [
     "FA",    # flake8-future-annotations — flag redundant `from __future__ import annotations`
     "ASYNC", # flake8-async — blocking calls in async, gather vs TaskGroup
     "PERF",  # Perflint
+    "A",     # flake8-builtins — catch shadowing stdlib names
 ]
 ignore = [
     "E501", # handled by formatter
@@ -78,6 +79,8 @@ include = ["src", "tests"]
 
 [tool.ty.rules]
 possibly-missing-attribute = "warn"
+possibly-missing-import = "error"
+redundant-cast = "warn"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -8,10 +8,10 @@ asserts no diverger's prompt contains any other diverger's output.
 """
 
 import asyncio
-import time
 from collections.abc import Callable, Coroutine, Sequence
 from typing import TYPE_CHECKING, Any
 
+from ._timing import elapsed_ms
 from .llm import StreamHandler
 from .models import Message, Phase, PhaseOutput, Role
 from .prompts import (
@@ -68,28 +68,23 @@ async def run_restate(
     isolated prompt — they don't see each other's restatements. The transcript makes
     divergent interpretations visible to a human reviewer.
     """
-    members = list(council.agents.values())
     # Orchestrator skipped — its job is synthesis, not interpretation.
-    members = [a for a in members if a.config.role is not Role.ORCHESTRATOR]
+    members = [a for a in council.agents.values() if a.config.role is not Role.ORCHESTRATOR]
     if not members:
         return PhaseOutput(phase=Phase.RESTATE, messages=[], elapsed_ms=0)
     user_prompt = render_restate_prompt(task)
-    t0 = time.monotonic()
-    messages = await _run_concurrently(
-        [
-            a.respond(
-                user_prompt,
-                phase=Phase.RESTATE,
-                stream_handler=_handler_for(tokens, a.config.name),
-            )
-            for a in members
-        ]
-    )
-    return PhaseOutput(
-        phase=Phase.RESTATE,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        messages = await _run_concurrently(
+            [
+                a.respond(
+                    user_prompt,
+                    phase=Phase.RESTATE,
+                    stream_handler=_handler_for(tokens, a.config.name),
+                )
+                for a in members
+            ]
+        )
+    return PhaseOutput(phase=Phase.RESTATE, messages=messages, elapsed_ms=ms())
 
 
 async def run_divergent(
@@ -100,23 +95,18 @@ async def run_divergent(
     # The prompt builder signature takes only `task`. Peer drafts are structurally
     # unreachable from here. This is the enforcement point of the anti-anchoring rule.
     user_prompt = render_divergent_prompt(task)
-
-    t0 = time.monotonic()
-    messages = await _run_concurrently(
-        [
-            a.respond(
-                user_prompt,
-                phase=Phase.DIVERGENT,
-                stream_handler=_handler_for(tokens, a.config.name),
-            )
-            for a in divergers
-        ]
-    )
-    return PhaseOutput(
-        phase=Phase.DIVERGENT,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        messages = await _run_concurrently(
+            [
+                a.respond(
+                    user_prompt,
+                    phase=Phase.DIVERGENT,
+                    stream_handler=_handler_for(tokens, a.config.name),
+                )
+                for a in divergers
+            ]
+        )
+    return PhaseOutput(phase=Phase.DIVERGENT, messages=messages, elapsed_ms=ms())
 
 
 async def run_critique(
@@ -131,22 +121,18 @@ async def run_critique(
     if not reviewers:
         return PhaseOutput(phase=Phase.CRITIQUE, messages=[], elapsed_ms=0)
     prompt = render_critique_prompt(task, diverge.messages)
-    t0 = time.monotonic()
-    messages = await _run_concurrently(
-        [
-            a.respond(
-                prompt,
-                phase=Phase.CRITIQUE,
-                stream_handler=_handler_for(tokens, a.config.name),
-            )
-            for a in reviewers
-        ]
-    )
-    return PhaseOutput(
-        phase=Phase.CRITIQUE,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        messages = await _run_concurrently(
+            [
+                a.respond(
+                    prompt,
+                    phase=Phase.CRITIQUE,
+                    stream_handler=_handler_for(tokens, a.config.name),
+                )
+                for a in reviewers
+            ]
+        )
+    return PhaseOutput(phase=Phase.CRITIQUE, messages=messages, elapsed_ms=ms())
 
 
 async def run_steelman(
@@ -164,22 +150,18 @@ async def run_steelman(
     if not reviewers:
         return PhaseOutput(phase=Phase.STEELMAN, messages=[], elapsed_ms=0)
     prompt = render_steelman_prompt(task, diverge.messages, critique.messages)
-    t0 = time.monotonic()
-    messages = await _run_concurrently(
-        [
-            a.respond(
-                prompt,
-                phase=Phase.STEELMAN,
-                stream_handler=_handler_for(tokens, a.config.name),
-            )
-            for a in reviewers
-        ]
-    )
-    return PhaseOutput(
-        phase=Phase.STEELMAN,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        messages = await _run_concurrently(
+            [
+                a.respond(
+                    prompt,
+                    phase=Phase.STEELMAN,
+                    stream_handler=_handler_for(tokens, a.config.name),
+                )
+                for a in reviewers
+            ]
+        )
+    return PhaseOutput(phase=Phase.STEELMAN, messages=messages, elapsed_ms=ms())
 
 
 async def run_synthesis(
@@ -202,24 +184,20 @@ async def run_synthesis(
         for name, agent in council.agents.items()
         if agent.config.sycophancy_prior is not None
     }
-    t0 = time.monotonic()
-    coros = [
-        agent.respond(
-            render_synthesis_prompt(
-                task, original, critique.messages, sycophancy_priors=priors or None
-            ),
-            phase=Phase.SYNTHESIS,
-            stream_handler=_handler_for(tokens, agent.config.name),
-        )
-        for original in diverge.messages
-        if (agent := council.agents.get(original.agent_name)) is not None
-    ]
-    messages = await _run_concurrently(coros)
-    return PhaseOutput(
-        phase=Phase.SYNTHESIS,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        coros = [
+            agent.respond(
+                render_synthesis_prompt(
+                    task, original, critique.messages, sycophancy_priors=priors or None
+                ),
+                phase=Phase.SYNTHESIS,
+                stream_handler=_handler_for(tokens, agent.config.name),
+            )
+            for original in diverge.messages
+            if (agent := council.agents.get(original.agent_name)) is not None
+        ]
+        messages = await _run_concurrently(coros)
+    return PhaseOutput(phase=Phase.SYNTHESIS, messages=messages, elapsed_ms=ms())
 
 
 async def run_cross_synthesis(
@@ -232,25 +210,21 @@ async def run_cross_synthesis(
     """Cross-synthesis (Mixture-of-Agents layer-2): each drafter sees all peers'
     revised drafts and produces a final integration. Opt-in via `CouncilConfig.layered`.
     """
-    t0 = time.monotonic()
-    coros = []
-    for own in synthesis.messages:
-        agent = council.agents.get(own.agent_name)
-        if agent is None:
-            continue
-        coros.append(
-            agent.respond(
-                render_cross_synthesis_prompt(task, own, synthesis.messages),
-                phase=Phase.CROSS_SYNTHESIS,
-                stream_handler=_handler_for(tokens, agent.config.name),
+    with elapsed_ms() as ms:
+        coros = []
+        for own in synthesis.messages:
+            agent = council.agents.get(own.agent_name)
+            if agent is None:
+                continue
+            coros.append(
+                agent.respond(
+                    render_cross_synthesis_prompt(task, own, synthesis.messages),
+                    phase=Phase.CROSS_SYNTHESIS,
+                    stream_handler=_handler_for(tokens, agent.config.name),
+                )
             )
-        )
-    messages = await _run_concurrently(coros)
-    return PhaseOutput(
-        phase=Phase.CROSS_SYNTHESIS,
-        messages=messages,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+        messages = await _run_concurrently(coros)
+    return PhaseOutput(phase=Phase.CROSS_SYNTHESIS, messages=messages, elapsed_ms=ms())
 
 
 async def run_finishing(
@@ -265,15 +239,13 @@ async def run_finishing(
     if not finishers:
         return PhaseOutput(phase=Phase.FINISHING, messages=[], elapsed_ms=0)
     prompt = render_finishing_prompt(task, synthesis.messages)
-    t0 = time.monotonic()
-    msg = await finishers[0].respond(
-        prompt,
-        phase=Phase.FINISHING,
-        stream_handler=_handler_for(tokens, finishers[0].config.name),
-    )
-    return PhaseOutput(
-        phase=Phase.FINISHING, messages=[msg], elapsed_ms=int((time.monotonic() - t0) * 1000)
-    )
+    with elapsed_ms() as ms:
+        msg = await finishers[0].respond(
+            prompt,
+            phase=Phase.FINISHING,
+            stream_handler=_handler_for(tokens, finishers[0].config.name),
+        )
+    return PhaseOutput(phase=Phase.FINISHING, messages=[msg], elapsed_ms=ms())
 
 
 async def run_orchestrate(
@@ -287,15 +259,13 @@ async def run_orchestrate(
     # Validator guarantees exactly one orchestrator is present.
     orchestrator = council.by_role[Role.ORCHESTRATOR][0]
     prompt = render_orchestrate_prompt(task, list(phases_so_far))
-    t0 = time.monotonic()
-    msg = await orchestrator.respond(
-        prompt,
-        phase=Phase.ORCHESTRATE,
-        stream_handler=_handler_for(tokens, orchestrator.config.name),
-    )
-    return PhaseOutput(
-        phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=int((time.monotonic() - t0) * 1000)
-    )
+    with elapsed_ms() as ms:
+        msg = await orchestrator.respond(
+            prompt,
+            phase=Phase.ORCHESTRATE,
+            stream_handler=_handler_for(tokens, orchestrator.config.name),
+        )
+    return PhaseOutput(phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=ms())
 
 
 async def run_retrospective(
@@ -313,14 +283,10 @@ async def run_retrospective(
         return PhaseOutput(phase=Phase.RETROSPECTIVE, messages=[], elapsed_ms=0)
     critic = critics[0]
     prompt = render_retrospective_prompt(task, phases_so_far)
-    t0 = time.monotonic()
-    msg = await critic.respond(
-        prompt,
-        phase=Phase.RETROSPECTIVE,
-        stream_handler=_handler_for(tokens, critic.config.name),
-    )
-    return PhaseOutput(
-        phase=Phase.RETROSPECTIVE,
-        messages=[msg],
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
-    )
+    with elapsed_ms() as ms:
+        msg = await critic.respond(
+            prompt,
+            phase=Phase.RETROSPECTIVE,
+            stream_handler=_handler_for(tokens, critic.config.name),
+        )
+    return PhaseOutput(phase=Phase.RETROSPECTIVE, messages=[msg], elapsed_ms=ms())

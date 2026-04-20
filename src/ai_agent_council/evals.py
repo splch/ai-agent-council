@@ -28,7 +28,6 @@ ollama/phi4:14b --out /tmp/eval.json`
 """
 
 import asyncio
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Self
@@ -37,6 +36,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from . import llm
+from ._timing import elapsed_ms
 from .config import CouncilConfig, load_council_config
 from .council import Council
 
@@ -114,26 +114,26 @@ class EvalReport(BaseModel):
 
 
 async def _run_council(council: Council, task: TaskSpec) -> RunResult:
-    t0 = time.monotonic()
-    try:
-        result = await council.run(task.task)
-    except Exception as e:
-        return RunResult(
-            task_id=task.id,
-            mode="council",
-            answer="",
-            elapsed_ms=int((time.monotonic() - t0) * 1000),
-            tokens_in=0,
-            tokens_out=0,
-            cost_usd=0.0,
-            error=f"{type(e).__name__}: {e}",
-        )
+    with elapsed_ms() as ms:
+        try:
+            result = await council.run(task.task)
+        except Exception as e:
+            return RunResult(
+                task_id=task.id,
+                mode="council",
+                answer="",
+                elapsed_ms=ms(),
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=0.0,
+                error=f"{type(e).__name__}: {e}",
+            )
     tin, tout = result.total_tokens
     return RunResult(
         task_id=task.id,
         mode="council",
         answer=result.final_answer,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
+        elapsed_ms=ms(),
         tokens_in=tin,
         tokens_out=tout,
         cost_usd=result.total_cost_usd,
@@ -147,32 +147,32 @@ _BASELINE_SYSTEM = (
 
 
 async def _run_baseline(model: str, task: TaskSpec) -> RunResult:
-    t0 = time.monotonic()
-    try:
-        content, meta = await llm.complete(
-            model=model,
-            system=_BASELINE_SYSTEM,
-            user=task.task,
-            temperature=0.3,
-            max_tokens=2048,
-            timeout_s=120.0,
-        )
-    except Exception as e:
-        return RunResult(
-            task_id=task.id,
-            mode="baseline",
-            answer="",
-            elapsed_ms=int((time.monotonic() - t0) * 1000),
-            tokens_in=0,
-            tokens_out=0,
-            cost_usd=0.0,
-            error=f"{type(e).__name__}: {e}",
-        )
+    with elapsed_ms() as ms:
+        try:
+            content, meta = await llm.complete(
+                model=model,
+                system=_BASELINE_SYSTEM,
+                user=task.task,
+                temperature=0.3,
+                max_tokens=2048,
+                timeout_s=120.0,
+            )
+        except Exception as e:
+            return RunResult(
+                task_id=task.id,
+                mode="baseline",
+                answer="",
+                elapsed_ms=ms(),
+                tokens_in=0,
+                tokens_out=0,
+                cost_usd=0.0,
+                error=f"{type(e).__name__}: {e}",
+            )
     return RunResult(
         task_id=task.id,
         mode="baseline",
         answer=content,
-        elapsed_ms=int((time.monotonic() - t0) * 1000),
+        elapsed_ms=ms(),
         tokens_in=meta.get("tokens_in") or 0,
         tokens_out=meta.get("tokens_out") or 0,
         cost_usd=meta.get("cost_usd") or 0.0,

@@ -144,7 +144,7 @@ def _eval_arith(node: ast.AST) -> float:
     match node:
         case ast.Expression(body=b):
             return _eval_arith(b)
-        case ast.Constant(value=v) if isinstance(v, int | float):
+        case ast.Constant(value=v) if type(v) in (int, float):
             return v
         case ast.BinOp(op=operator, left=left, right=right) if type(operator) in _ARITH_OPS:
             return _ARITH_OPS[type(operator)](_eval_arith(left), _eval_arith(right))

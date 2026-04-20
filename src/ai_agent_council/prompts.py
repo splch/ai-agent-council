@@ -32,7 +32,47 @@ reference peer output. That is the structural anti-anchoring invariant, and a
 regression test asserts it by construction.
 """
 
+import string
+
 from .models import Message, PhaseOutput, Role
+
+
+def _render_anonymized_proposals(messages: list[Message]) -> list[str]:
+    """Render divergent-phase messages as anonymized "Proposal A / B / …" blocks.
+
+    Shared between the critique and steelman prompts — both present drafts for
+    evaluation without revealing authorship. Names live in the transcript for
+    human review.
+    """
+    lines: list[str] = []
+    for idx, m in enumerate(messages):
+        label = f"Proposal {string.ascii_uppercase[idx]}"
+        if m.error:
+            lines.append(f"--- {label} [FAILED] ---")
+            lines.append(f"(author error: {m.error})")
+        else:
+            lines.append(f"--- {label} ---")
+            lines.append(m.content.strip() or "(empty response)")
+        lines.append("")
+    return lines
+
+
+def _render_transcript(phases_so_far: list[PhaseOutput]) -> list[str]:
+    """Render a full phase transcript with attribution. Shared between the orchestrate
+    and retrospective prompts — both consume the complete deliberation history with
+    agent names preserved (unlike the anonymized critique view)."""
+    lines: list[str] = []
+    for ph in phases_so_far:
+        lines.append(f"### Phase: {ph.phase.value}")
+        for m in ph.messages:
+            header = f"[{m.agent_name} ({m.role.value})]"
+            if m.error:
+                lines.append(f"{header} FAILED: {m.error}")
+            else:
+                lines.append(header)
+                lines.append(m.content.strip() or "(empty)")
+        lines.append("")
+    return lines
 
 COMMON_CODA = """\
 Norms of conduct — apply to every turn:
@@ -299,15 +339,7 @@ def render_critique_prompt(task: str, divergent_messages: list[Message]) -> str:
         "if you genuinely see none, steelman the strongest possible objection first.",
         "",
     ]
-    for idx, m in enumerate(divergent_messages):
-        label = f"Proposal {chr(ord('A') + idx)}"
-        if m.error:
-            parts.append(f"--- {label} [FAILED] ---")
-            parts.append(f"(author error: {m.error})")
-        else:
-            parts.append(f"--- {label} ---")
-            parts.append(m.content.strip() or "(empty response)")
-        parts.append("")
+    parts.extend(_render_anonymized_proposals(divergent_messages))
     parts.append("Respond in the JSON format specified in your system prompt.")
     return "\n".join(parts)
 
@@ -335,15 +367,7 @@ def render_steelman_prompt(
         "Proposals (identities hidden — evaluate the argument, not the author):",
         "",
     ]
-    for idx, m in enumerate(divergent_messages):
-        label = f"Proposal {chr(ord('A') + idx)}"
-        if m.error:
-            parts.append(f"--- {label} [FAILED] ---")
-            parts.append(f"(author error: {m.error})")
-        else:
-            parts.append(f"--- {label} ---")
-            parts.append(m.content.strip() or "(empty response)")
-        parts.append("")
+    parts.extend(_render_anonymized_proposals(divergent_messages))
     parts.append("Your prior critique (so you can update rather than repeat):")
     for c in prior_critiques:
         if c.error:
@@ -428,13 +452,15 @@ def render_synthesis_prompt(
 def render_cross_synthesis_prompt(
     task: str,
     own_synthesis: Message,
-    peer_syntheses: list[Message],
+    all_syntheses: list[Message],
 ) -> str:
     """Build the cross-synthesis prompt — a Mixture-of-Agents layer-2 revision.
 
     Each drafter sees ALL peers' synthesized drafts (including their own) and produces
     a final revised version that integrates what's strongest across them. This is the
-    "each layer's output feeds the next layer" pattern from the MoA research.
+    "each layer's output feeds the next layer" pattern from the MoA research. The
+    drafter's own synthesis is filtered out of the "peers" block so we don't show the
+    same text twice.
     """
     parts: list[str] = [
         "Commander's Intent (the task):",
@@ -448,7 +474,7 @@ def render_cross_synthesis_prompt(
         "Your peers' revised drafts (they saw the same critiques you did; these are their "
         "independent revisions):",
     ]
-    for p in peer_syntheses:
+    for p in all_syntheses:
         if p.agent_name == own_synthesis.agent_name:
             continue
         if p.error:
@@ -510,16 +536,7 @@ def render_orchestrate_prompt(task: str, phases_so_far: list[PhaseOutput]) -> st
         "source unless the council surfaced material disagreement with it.",
         "",
     ]
-    for ph in phases_so_far:
-        parts.append(f"### Phase: {ph.phase.value}")
-        for m in ph.messages:
-            header = f"[{m.agent_name} ({m.role.value})]"
-            if m.error:
-                parts.append(f"{header} FAILED: {m.error}")
-            else:
-                parts.append(header)
-                parts.append(m.content.strip() or "(empty)")
-        parts.append("")
+    parts.extend(_render_transcript(phases_so_far))
     parts.append(
         "Output the final user-facing answer, structured per the system prompt: "
         "confident / disagreed / unknown / synthesis. No preamble."
@@ -536,16 +553,7 @@ def render_retrospective_prompt(task: str, phases_so_far: list[PhaseOutput]) -> 
         task.strip(),
         "",
     ]
-    for ph in phases_so_far:
-        parts.append(f"### Phase: {ph.phase.value}")
-        for m in ph.messages:
-            header = f"[{m.agent_name} ({m.role.value})]"
-            if m.error:
-                parts.append(f"{header} FAILED: {m.error}")
-            else:
-                parts.append(header)
-                parts.append(m.content.strip() or "(empty)")
-        parts.append("")
+    parts.extend(_render_transcript(phases_so_far))
     parts.extend(
         [
             "Identify 1 to 3 concrete, actionable lessons that would improve the next run of "
