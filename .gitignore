@@ -53,3 +53,7 @@ Thumbs.db
 !.env.example
 transcripts/
 *.log
+
+# User-scaffolded council configs live in the project root; the shipped templates
+# are what's tracked (src/ai_agent_council/templates/).
+/council*.yaml
