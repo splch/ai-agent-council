@@ -63,6 +63,12 @@ class AgentConfig(BaseModel):
     extraversion: float | None = Field(default=None, ge=0.0, le=1.0)
     agreeableness: float | None = Field(default=None, ge=0.0, le=1.0)
     neuroticism: float | None = Field(default=None, ge=0.0, le=1.0)
+    # Estimated sycophancy prior, 0.0 = this agent rarely defers under social pressure,
+    # 1.0 = this agent defers easily. Surfaced to peers in the synthesis phase so
+    # drafters weigh critiques by the source's independence. Research: exposing
+    # sycophancy priors reduced the influence of defer-prone peers and improved
+    # final discussion accuracy by an absolute 10.5pp. Leave None to omit.
+    sycophancy_prior: float | None = Field(default=None, ge=0.0, le=1.0)
 
     def persona_dict(self) -> dict[str, float]:
         """Return only the trait dials that are set — suitable for prompt rendering."""

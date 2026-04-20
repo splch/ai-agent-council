@@ -190,11 +190,23 @@ async def run_synthesis(
     tokens: TokenStream | None = None,
 ) -> PhaseOutput:
     """Synthesis phase. Each original drafter sees critiques, revises. Drafters are
-    explicitly permitted to disagree with any critique point (system prompt says so)."""
+    explicitly permitted to disagree with any critique point (system prompt says so).
+
+    If any council member has a sycophancy_prior set, those priors are surfaced next
+    to the critic's name — drafters use the prior to weigh how independently each
+    critique was produced.
+    """
+    priors = {
+        name: agent.config.sycophancy_prior
+        for name, agent in council.agents.items()
+        if agent.config.sycophancy_prior is not None
+    }
     t0 = time.monotonic()
     coros = [
         agent.respond(
-            render_synthesis_prompt(task, original, critique.messages),
+            render_synthesis_prompt(
+                task, original, critique.messages, sycophancy_priors=priors or None
+            ),
             phase=Phase.SYNTHESIS,
             stream_handler=_handler_for(tokens, agent.config.name),
         )

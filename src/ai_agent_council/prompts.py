@@ -367,13 +367,20 @@ def render_synthesis_prompt(
     task: str,
     own_draft: Message,
     all_critiques: list[Message],
+    sycophancy_priors: dict[str, float] | None = None,
 ) -> str:
     """Build the synthesis-phase prompt for one original drafter.
 
     The drafter sees their own original plus the full set of critiques. They are prompted
     to EVALUATE each critique (as a judge) before deciding whether to adopt it — not to
     respond conversationally, which is the social-pressure path to sycophantic revision.
+
+    When `sycophancy_priors` is provided, each critic's name is annotated with their prior
+    — high values mean the critic defers easily, so their critiques should be weighed
+    with independence in mind. This is the credibility-signal mechanism from the
+    multi-agent sycophancy research (improved final accuracy by ~10.5pp).
     """
+    priors = sycophancy_priors or {}
     parts: list[str] = [
         "Commander's Intent (the task):",
         task.strip(),
@@ -385,11 +392,18 @@ def render_synthesis_prompt(
         "",
         "Critiques from your peers (the Pixar rule applied — they diagnose, not prescribe):",
     ]
+    if priors:
+        parts.append(
+            "  (Sycophancy priors annotated where available — 0.0 = rarely defers, "
+            "1.0 = defers easily. Weight critiques from high-prior peers with independence.)"
+        )
     for c in all_critiques:
+        prior = priors.get(c.agent_name)
+        prior_tag = f" (sycophancy prior: {prior:.2f})" if prior is not None else ""
         if c.error:
-            parts.append(f"[{c.agent_name} critique FAILED: {c.error}]")
+            parts.append(f"[{c.agent_name}{prior_tag} critique FAILED: {c.error}]")
         else:
-            parts.append(f"--- From {c.agent_name} ---")
+            parts.append(f"--- From {c.agent_name}{prior_tag} ---")
             parts.append(c.content.strip() or "(empty)")
     parts.extend(
         [
