@@ -21,6 +21,7 @@ from .prompts import (
     render_orchestrate_prompt,
     render_restate_prompt,
     render_retrospective_prompt,
+    render_steelman_prompt,
     render_synthesis_prompt,
 )
 
@@ -142,6 +143,39 @@ async def run_critique(
     )
     return PhaseOutput(
         phase=Phase.CRITIQUE,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
+
+
+async def run_steelman(
+    council: Council,
+    task: str,
+    diverge: PhaseOutput,
+    critique: PhaseOutput,
+    *,
+    tokens: TokenStream | None = None,
+) -> PhaseOutput:
+    """Steelman round: each critic is asked to produce the strongest possible
+    objection to each proposal, triggered when the first critique pass returned
+    too few substantive issues."""
+    reviewers = council.by_role.get(Role.CRITIC, []) + council.by_role.get(Role.REASONER, [])
+    if not reviewers:
+        return PhaseOutput(phase=Phase.STEELMAN, messages=[], elapsed_ms=0)
+    prompt = render_steelman_prompt(task, diverge.messages, critique.messages)
+    t0 = time.monotonic()
+    messages = await _run_concurrently(
+        [
+            a.respond(
+                prompt,
+                phase=Phase.STEELMAN,
+                stream_handler=_handler_for(tokens, a.config.name),
+            )
+            for a in reviewers
+        ]
+    )
+    return PhaseOutput(
+        phase=Phase.STEELMAN,
         messages=messages,
         elapsed_ms=int((time.monotonic() - t0) * 1000),
     )

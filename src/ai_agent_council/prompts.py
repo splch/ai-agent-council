@@ -312,6 +312,57 @@ def render_critique_prompt(task: str, divergent_messages: list[Message]) -> str:
     return "\n".join(parts)
 
 
+def render_steelman_prompt(
+    task: str,
+    divergent_messages: list[Message],
+    prior_critiques: list[Message],
+) -> str:
+    """Build the steelman-round prompt. Triggered when the first critique pass came
+    back with too few substantive issues — the dissent quota. Critics are asked to
+    articulate the single strongest possible objection to each proposal.
+    """
+    parts: list[str] = [
+        "Commander's Intent (the task):",
+        task.strip(),
+        "",
+        "The first critique round returned too few substantive objections to meet this "
+        "council's dissent quota. You are NOT being asked to fabricate problems. You ARE "
+        "being asked to steelman — for each proposal, articulate the single strongest "
+        "objection a thoughtful opponent could raise, even if you previously judged the "
+        "proposal acceptable. After honest reflection, if the proposal is genuinely sound, "
+        "state what objection you considered and why you still reject it.",
+        "",
+        "Proposals (identities hidden — evaluate the argument, not the author):",
+        "",
+    ]
+    for idx, m in enumerate(divergent_messages):
+        label = f"Proposal {chr(ord('A') + idx)}"
+        if m.error:
+            parts.append(f"--- {label} [FAILED] ---")
+            parts.append(f"(author error: {m.error})")
+        else:
+            parts.append(f"--- {label} ---")
+            parts.append(m.content.strip() or "(empty response)")
+        parts.append("")
+    parts.append("Your prior critique (so you can update rather than repeat):")
+    for c in prior_critiques:
+        if c.error:
+            parts.append(f"[{c.agent_name}: FAILED]")
+        else:
+            parts.append(f"--- From {c.agent_name} ---")
+            parts.append(c.content.strip() or "(empty)")
+    parts.extend(
+        [
+            "",
+            "Respond in the same JSON format as the initial critique. Include a top-level "
+            '"steelman" key set to true. For each issue, include an "endorsed" boolean: '
+            "true if you stand behind the objection, false if it is a steelman argument "
+            "you are raising for completeness but do not personally endorse.",
+        ]
+    )
+    return "\n".join(parts)
+
+
 def render_synthesis_prompt(
     task: str,
     own_draft: Message,

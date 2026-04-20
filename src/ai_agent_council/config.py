@@ -81,6 +81,13 @@ class CouncilConfig(BaseModel):
     # surfaced via the transcript for human review. Research catches ~20% of tasks
     # where the user asked the wrong question.
     restate: bool = False
+    # Minimum fraction of critics who must find substantive issues. If the first
+    # critique round comes back with too few real objections (below this threshold),
+    # a steelman round is triggered — critics are required to articulate the
+    # strongest possible objection they can, even if they initially found the
+    # proposal acceptable. Set 0 (default) to disable. The research maps this
+    # to the "if >70% agree too early, force steelman" dissent quota.
+    min_dissent: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def _validate_roster(self) -> Self:

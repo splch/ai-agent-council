@@ -14,7 +14,7 @@ from . import phases as phases_mod
 from . import retrospectives
 from .agent import Agent
 from .config import CouncilConfig, hash_config, load_council_config
-from .models import CouncilResult, PhaseOutput, Role
+from .models import CouncilResult, Phase, PhaseOutput, Role
 from .phases import TokenStream
 from .prompts import render_lessons_block
 
@@ -79,7 +79,24 @@ class Council:
         _emit(stream, critique)
         phases_run.append(critique)
 
-        synthesis = await phases_mod.run_synthesis(self, task, divergent, critique, tokens=tokens)
+        # Dissent quota: if the first critique pass found too few substantive issues,
+        # force a steelman round. The combined critique+steelman feed into synthesis.
+        synthesis_critique = critique
+        if _should_steelman(critique, self.config.min_dissent):
+            steelman = await phases_mod.run_steelman(
+                self, task, divergent, critique, tokens=tokens
+            )
+            _emit(stream, steelman)
+            phases_run.append(steelman)
+            synthesis_critique = PhaseOutput(
+                phase=Phase.CRITIQUE,
+                messages=list(critique.messages) + list(steelman.messages),
+                elapsed_ms=critique.elapsed_ms + steelman.elapsed_ms,
+            )
+
+        synthesis = await phases_mod.run_synthesis(
+            self, task, divergent, synthesis_critique, tokens=tokens
+        )
         _emit(stream, synthesis)
         phases_run.append(synthesis)
 
@@ -123,6 +140,53 @@ def write_transcript(result: CouncilResult, path: Path | str) -> Path:
 
 
 _BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+(.+)$")
+
+
+def _count_substantive_critiques(phase: PhaseOutput) -> tuple[int, int]:
+    """Return (count of critics who found real issues, total critics who responded).
+
+    A substantive critique is either (a) valid JSON with a non-empty "critiques"
+    array whose entries have non-empty "issues", or (b) non-JSON content that is
+    non-trivially long. Failed agents (error set) aren't counted toward the total.
+    """
+    total = 0
+    with_issues = 0
+    for m in phase.messages:
+        if m.error:
+            continue
+        total += 1
+        content = m.content.strip()
+        if not content:
+            continue
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # Non-JSON response; count as substantive if content is reasonably long.
+            if len(content) > 40:
+                with_issues += 1
+            continue
+        if isinstance(data, dict):
+            critiques = data.get("critiques", [])
+            if isinstance(critiques, list) and any(
+                isinstance(c, dict) and c.get("issues") for c in critiques
+            ):
+                with_issues += 1
+    return with_issues, total
+
+
+def _should_steelman(critique: PhaseOutput, min_dissent: float) -> bool:
+    """Decide whether the dissent-quota trigger fires.
+
+    Never fires when min_dissent is 0 (disabled) or no critic responded. Otherwise
+    compares the fraction of critics who found substantive issues against the
+    minimum threshold and triggers when it falls below.
+    """
+    if min_dissent <= 0:
+        return False
+    with_issues, total = _count_substantive_critiques(critique)
+    if total == 0:
+        return False
+    return (with_issues / total) < min_dissent
 
 
 def _extract_lessons(retro_content: str) -> list[str]:

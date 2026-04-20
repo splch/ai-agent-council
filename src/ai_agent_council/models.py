@@ -23,6 +23,7 @@ class Phase(StrEnum):
     RESTATE = "restate"
     DIVERGENT = "divergent"
     CRITIQUE = "critique"
+    STEELMAN = "steelman"
     SYNTHESIS = "synthesis"
     FINISHING = "finishing"
     ORCHESTRATE = "orchestrate"
