@@ -499,6 +499,23 @@ def render_retrospective_prompt(task: str, phases_so_far: list[PhaseOutput]) -> 
     return "\n".join(parts)
 
 
+def render_persona_block(traits: dict[str, float]) -> str:
+    """Format Big Five trait dials as a system-prompt appendix. Returns '' if empty.
+
+    Research: prompt-based numeric trait scaling produces measurable behavioral shifts
+    with r > 0.85 correlation. Listing the numeric values directly (without wordy
+    interpretation) is what the research validates.
+    """
+    if not traits:
+        return ""
+    lines = [f"  {trait.capitalize()}: {value:.2f}" for trait, value in traits.items()]
+    return (
+        "Personality dials (Big Five, 0.0-1.0 scale, 0.5 is average). Express these "
+        "traits in your behavior throughout the turn — higher values mean stronger "
+        "expression of that trait:\n" + "\n".join(lines)
+    )
+
+
 def render_lessons_block(lessons: list[str]) -> str:
     """Format recalled lessons as a system-prompt footer. Returns '' when empty."""
     if not lessons:

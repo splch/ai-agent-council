@@ -29,6 +29,9 @@ agents:
     model: ollama/qwen3.6:latest
     temperature: 0.9
     max_tokens: 2048
+    # Big Five: high Openness + above-average Extraversion drive divergent framings.
+    openness: 0.9
+    extraversion: 0.7
 
   - name: Judge
     role: reasoner
@@ -41,6 +44,11 @@ agents:
     model: ollama/deepseek-r1:32b
     temperature: 0.3
     max_tokens: 3072
+    # Big Five: high Conscientiousness + elevated Neuroticism (epistemic anxiety
+    # — uncomfortable with unsupported claims). Low Agreeableness when evaluating.
+    conscientiousness: 0.9
+    neuroticism: 0.7
+    agreeableness: 0.3
 
   - name: Adept
     role: specialist
@@ -52,6 +60,10 @@ agents:
     model: ollama/devstral-small-2:24b
     temperature: 0.4
     max_tokens: 4096
+    # Big Five: high Conscientiousness, low Agreeableness — precision over politeness,
+    # won't hedge inside the domain.
+    conscientiousness: 0.9
+    agreeableness: 0.3
 
   - name: Hawk
     role: critic
@@ -66,6 +78,12 @@ agents:
     temperature: 0.2
     max_tokens: 2048
     json_mode: true
+    # Big Five: Low Agreeableness drives the adversarial review; high Openness lets
+    # the Skeptic steelman opposing positions; high Conscientiousness grounds
+    # critiques in specific quoted text.
+    openness: 0.7
+    conscientiousness: 0.8
+    agreeableness: 0.2
 
   - name: Polish
     role: finisher
@@ -78,6 +96,10 @@ agents:
     temperature: 0.1
     max_tokens: 3072
     tools: [current_time, calculate, read_file, fetch_url]
+    # Big Five: very high Conscientiousness (rigor, not authorship); low Openness
+    # (don't introduce new ideas during polish).
+    conscientiousness: 0.95
+    openness: 0.2
 
   - name: Scribe
     role: orchestrator
@@ -91,3 +113,8 @@ agents:
     model: ollama/gemma4:31b
     temperature: 0.3
     max_tokens: 3072
+    # Big Five: balanced with elevated Conscientiousness for faithful synthesis;
+    # moderate Agreeableness to preserve minority positions instead of
+    # rubber-stamping majority.
+    conscientiousness: 0.8
+    agreeableness: 0.5

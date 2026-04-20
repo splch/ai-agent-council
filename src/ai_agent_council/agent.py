@@ -8,7 +8,7 @@ from .config import AgentConfig
 from .exceptions import LLMError
 from .llm import StreamHandler
 from .models import Message, Phase, ToolCall
-from .prompts import render_role_prompt
+from .prompts import render_persona_block, render_role_prompt
 from .tools import Tool
 from .tools import resolve as _resolve_tools
 
@@ -30,8 +30,12 @@ class Agent:
     @classmethod
     def from_config(cls, cfg: AgentConfig, *, lessons: str = "") -> Self:
         """Build an Agent. Optional `lessons` block is appended to the system prompt —
-        used by Council to inject recalled retrospective lessons."""
+        used by Council to inject recalled retrospective lessons. Big Five persona dials
+        from the config are appended when any are set."""
         prompt = cfg.system_prompt or render_role_prompt(cfg.role, cfg.name)
+        persona = render_persona_block(cfg.persona_dict())
+        if persona:
+            prompt = prompt + "\n\n" + persona
         if lessons:
             prompt = prompt + "\n\n" + lessons
         return cls(config=cfg, system_prompt=prompt, tools=_resolve_tools(cfg.tools))

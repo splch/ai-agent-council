@@ -55,6 +55,25 @@ class AgentConfig(BaseModel):
     # Cap on the model's tool-call loop. After this many LLM rounds without a plain-content
     # answer, the loop exits with whatever content came last.
     max_tool_iterations: int = Field(default=5, ge=1, le=20)
+    # Big Five personality dials. Each is optional (None = don't include in the prompt).
+    # Research: prompt-based numeric trait scaling yields r > 0.85 correlation between
+    # assigned levels and measured behavioral shifts. Range 0.0-1.0; 0.5 is average.
+    openness: float | None = Field(default=None, ge=0.0, le=1.0)
+    conscientiousness: float | None = Field(default=None, ge=0.0, le=1.0)
+    extraversion: float | None = Field(default=None, ge=0.0, le=1.0)
+    agreeableness: float | None = Field(default=None, ge=0.0, le=1.0)
+    neuroticism: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    def persona_dict(self) -> dict[str, float]:
+        """Return only the trait dials that are set — suitable for prompt rendering."""
+        traits = {
+            "openness": self.openness,
+            "conscientiousness": self.conscientiousness,
+            "extraversion": self.extraversion,
+            "agreeableness": self.agreeableness,
+            "neuroticism": self.neuroticism,
+        }
+        return {k: v for k, v in traits.items() if v is not None}
 
     @property
     def family(self) -> str:

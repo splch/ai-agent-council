@@ -35,6 +35,9 @@ agents:
     model: ollama/llama3.1:8b
     temperature: 0.9
     max_tokens: 1536
+    # Big Five: high Openness for divergent framings; moderate Extraversion.
+    openness: 0.9
+    extraversion: 0.7
 
   - name: Judge
     role: reasoner
@@ -45,6 +48,11 @@ agents:
     model: ollama/deepseek-r1:7b
     temperature: 0.4
     max_tokens: 2048
+    # Big Five: high Conscientiousness + epistemic-anxiety Neuroticism. Doubles as
+    # Critic in this roster, so low Agreeableness too.
+    conscientiousness: 0.9
+    neuroticism: 0.7
+    agreeableness: 0.3
 
   - name: Adept
     role: specialist
@@ -55,6 +63,9 @@ agents:
     model: ollama/qwen2.5-coder:7b
     temperature: 0.5
     max_tokens: 2048
+    # Big Five: high Conscientiousness, low Agreeableness — precision + will push back.
+    conscientiousness: 0.9
+    agreeableness: 0.3
 
   - name: Polish
     role: finisher
@@ -66,6 +77,9 @@ agents:
     temperature: 0.1
     max_tokens: 1536
     tools: [current_time, calculate, read_file, fetch_url]
+    # Big Five: very high Conscientiousness; low Openness (no new ideas during polish).
+    conscientiousness: 0.95
+    openness: 0.2
 
   - name: Scribe
     role: orchestrator
@@ -77,3 +91,6 @@ agents:
     model: ollama/phi4:14b
     temperature: 0.3
     max_tokens: 2048
+    # Big Five: balanced Chairman; elevated Conscientiousness for faithful synthesis.
+    conscientiousness: 0.8
+    agreeableness: 0.5
