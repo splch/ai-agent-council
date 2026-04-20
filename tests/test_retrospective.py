@@ -19,9 +19,7 @@ def _roster(name: str = "test-council", *, retrospective: bool = False, **extra)
         name=name,
         retrospective=retrospective,
         agents=[
-            AgentConfig(
-                name="Muse", role=Role.IDEATOR, model="ollama/gemma3:2b", temperature=0.9
-            ),
+            AgentConfig(name="Muse", role=Role.IDEATOR, model="ollama/gemma3:2b", temperature=0.9),
             AgentConfig(
                 name="Judge",
                 role=Role.REASONER,
@@ -169,17 +167,11 @@ async def test_retrospective_enabled_runs_phase_and_persists(
     assert loaded[0].cost_usd > 0  # FakeLLM reports per-call cost
 
 
-async def test_lessons_injected_into_next_runs_prompts(
-    fake_llm: FakeLLM, tmp_path: Path
-) -> None:
+async def test_lessons_injected_into_next_runs_prompts(fake_llm: FakeLLM, tmp_path: Path) -> None:
     """Append a retrospective manually, construct a fresh Council with retrospective=true,
     assert each agent's system prompt now contains the prior lesson."""
-    retrospectives.append(
-        _make_record("inject-test", "prior lesson X"), dir_=tmp_path
-    )
-    cfg = _roster(
-        name="inject-test", retrospective=True, retrospective_dir=tmp_path
-    )
+    retrospectives.append(_make_record("inject-test", "prior lesson X"), dir_=tmp_path)
+    cfg = _roster(name="inject-test", retrospective=True, retrospective_dir=tmp_path)
     council = Council(cfg)
     for agent in council.agents.values():
         assert "Recent lessons from prior runs" in agent.system_prompt
@@ -196,9 +188,7 @@ async def test_unparseable_retrospective_is_not_persisted(
     assert retrospectives.load_recent("garbage", dir_=tmp_path) == []
 
 
-async def test_retrospective_phase_errors_do_not_leak(
-    fake_llm: FakeLLM, tmp_path: Path
-) -> None:
+async def test_retrospective_phase_errors_do_not_leak(fake_llm: FakeLLM, tmp_path: Path) -> None:
     """If the Critic LLM call fails during retrospective, the run still completes and
     nothing is persisted for that run."""
     fake_llm.raise_for = {"ollama/phi4-mini:3.8b"}  # Hawk fails → no lessons extracted
@@ -214,17 +204,16 @@ async def test_retrospective_phase_errors_do_not_leak(
 # -----------------------------------------------------------------------------
 
 
-def test_default_dir_uses_xdg_when_set(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_default_dir_uses_xdg_when_set(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     assert retrospectives.default_dir() == tmp_path / "ai_agent_council" / "retrospectives"
 
 
-def test_default_dir_falls_back_to_home(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_default_dir_falls_back_to_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     # Path.home() uses $HOME on POSIX.
-    assert retrospectives.default_dir() == tmp_path / ".local" / "share" / "ai_agent_council" / "retrospectives"
+    assert (
+        retrospectives.default_dir()
+        == tmp_path / ".local" / "share" / "ai_agent_council" / "retrospectives"
+    )

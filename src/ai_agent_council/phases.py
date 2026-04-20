@@ -9,11 +9,11 @@ asserts no diverger's prompt contains any other diverger's output.
 
 import asyncio
 import time
-from collections.abc import Callable
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine, Sequence
+from typing import TYPE_CHECKING, Any
 
 from .llm import StreamHandler
-from .models import Phase, PhaseOutput, Role
+from .models import Message, Phase, PhaseOutput, Role
 from .prompts import (
     render_critique_prompt,
     render_divergent_prompt,
@@ -39,10 +39,6 @@ def _handler_for(ts: TokenStream | None, agent_name: str) -> StreamHandler | Non
     return lambda chunk: ts(agent_name, chunk)
 
 
-def _elapsed_ms(t0: float) -> int:
-    return int((time.monotonic() - t0) * 1000)
-
-
 def _select_divergers(council: Council) -> list[Agent]:
     """Ideator(s) + Specialist(s); enlist a Reasoner as fallback to keep the
     'multiple independent drafts' invariant satisfied in small rosters."""
@@ -52,8 +48,10 @@ def _select_divergers(council: Council) -> list[Agent]:
     return primary + council.by_role.get(Role.REASONER, [])[: 2 - len(primary)]
 
 
-async def _gather_messages(coros: list) -> list:
-    """Run `coros` concurrently via TaskGroup; return results in submission order."""
+async def _run_concurrently(
+    coros: Sequence[Coroutine[Any, Any, Message]],
+) -> list[Message]:
+    """TaskGroup runner. Results come back in submission order."""
     async with asyncio.TaskGroup() as tg:
         tasks = [tg.create_task(c) for c in coros]
     return [t.result() for t in tasks]
@@ -69,7 +67,7 @@ async def run_divergent(
     user_prompt = render_divergent_prompt(task)
 
     t0 = time.monotonic()
-    messages = await _gather_messages(
+    messages = await _run_concurrently(
         [
             a.respond(
                 user_prompt,
@@ -79,7 +77,11 @@ async def run_divergent(
             for a in divergers
         ]
     )
-    return PhaseOutput(phase=Phase.DIVERGENT, messages=messages, elapsed_ms=_elapsed_ms(t0))
+    return PhaseOutput(
+        phase=Phase.DIVERGENT,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
 
 
 async def run_critique(
@@ -95,7 +97,7 @@ async def run_critique(
         return PhaseOutput(phase=Phase.CRITIQUE, messages=[], elapsed_ms=0)
     prompt = render_critique_prompt(task, diverge.messages)
     t0 = time.monotonic()
-    messages = await _gather_messages(
+    messages = await _run_concurrently(
         [
             a.respond(
                 prompt,
@@ -105,7 +107,11 @@ async def run_critique(
             for a in reviewers
         ]
     )
-    return PhaseOutput(phase=Phase.CRITIQUE, messages=messages, elapsed_ms=_elapsed_ms(t0))
+    return PhaseOutput(
+        phase=Phase.CRITIQUE,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
 
 
 async def run_synthesis(
@@ -128,8 +134,12 @@ async def run_synthesis(
         for original in diverge.messages
         if (agent := council.agents.get(original.agent_name)) is not None
     ]
-    messages = await _gather_messages(coros)
-    return PhaseOutput(phase=Phase.SYNTHESIS, messages=messages, elapsed_ms=_elapsed_ms(t0))
+    messages = await _run_concurrently(coros)
+    return PhaseOutput(
+        phase=Phase.SYNTHESIS,
+        messages=messages,
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
+    )
 
 
 async def run_finishing(
@@ -150,7 +160,9 @@ async def run_finishing(
         phase=Phase.FINISHING,
         stream_handler=_handler_for(tokens, finishers[0].config.name),
     )
-    return PhaseOutput(phase=Phase.FINISHING, messages=[msg], elapsed_ms=_elapsed_ms(t0))
+    return PhaseOutput(
+        phase=Phase.FINISHING, messages=[msg], elapsed_ms=int((time.monotonic() - t0) * 1000)
+    )
 
 
 async def run_orchestrate(
@@ -170,7 +182,9 @@ async def run_orchestrate(
         phase=Phase.ORCHESTRATE,
         stream_handler=_handler_for(tokens, orchestrator.config.name),
     )
-    return PhaseOutput(phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=_elapsed_ms(t0))
+    return PhaseOutput(
+        phase=Phase.ORCHESTRATE, messages=[msg], elapsed_ms=int((time.monotonic() - t0) * 1000)
+    )
 
 
 async def run_retrospective(
@@ -195,5 +209,7 @@ async def run_retrospective(
         stream_handler=_handler_for(tokens, critic.config.name),
     )
     return PhaseOutput(
-        phase=Phase.RETROSPECTIVE, messages=[msg], elapsed_ms=_elapsed_ms(t0)
+        phase=Phase.RETROSPECTIVE,
+        messages=[msg],
+        elapsed_ms=int((time.monotonic() - t0) * 1000),
     )

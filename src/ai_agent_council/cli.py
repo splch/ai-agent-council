@@ -198,14 +198,3 @@ def validate(
             f"  [cyan]{agent.name}[/cyan] ({agent.role.value}) → {agent.model} "
             f"[dim](family={agent.family}, t={agent.temperature})[/dim]"
         )
-
-
-def main() -> None:  # pragma: no cover
-    try:
-        app()
-    except KeyboardInterrupt:
-        sys.exit(130)
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()

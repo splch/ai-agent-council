@@ -1,7 +1,7 @@
 """Council configuration: pydantic schema, YAML loader, cognitive-diversity validator."""
 
 import hashlib
-import re
+import itertools
 from pathlib import Path
 from typing import Self
 
@@ -10,10 +10,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .exceptions import CouncilConfigError
 from .models import Role
-
-_PROVIDER_STRIP = re.compile(r"^[^/]+/")
-_TAG_STRIP = re.compile(r":.*$")
-_FAMILY_CAPTURE = re.compile(r"^([a-z]+)")
 
 
 def derive_family(model: str) -> str:
@@ -33,12 +29,11 @@ def derive_family(model: str) -> str:
     """
     if not model:
         raise CouncilConfigError("empty model string")
-    without_provider = _PROVIDER_STRIP.sub("", model, count=1)
-    without_tag = _TAG_STRIP.sub("", without_provider)
-    m = _FAMILY_CAPTURE.match(without_tag.lower())
-    if not m:
+    head = model.split("/", 1)[-1].split(":", 1)[0].lower()
+    family = "".join(itertools.takewhile(str.isalpha, head))
+    if not family:
         raise CouncilConfigError(f"cannot derive family from model string: {model!r}")
-    return m.group(1)
+    return family
 
 
 class AgentConfig(BaseModel):

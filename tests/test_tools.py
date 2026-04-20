@@ -36,7 +36,7 @@ def test_resolve_unknown_raises() -> None:
 def test_current_time_returns_iso_string() -> None:
     out = tools.get("current_time").fn()
     assert "T" in out  # ISO 8601 has a 'T' between date and time
-    assert out.endswith("+00:00") or out.endswith("Z")
+    assert out.endswith(("+00:00", "Z"))
 
 
 @pytest.mark.parametrize(

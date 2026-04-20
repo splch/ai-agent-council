@@ -3,6 +3,7 @@
 import contextlib
 import json
 import logging
+import re
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -18,8 +19,6 @@ from .phases import TokenStream
 from .prompts import render_lessons_block
 
 PhaseStream = Callable[[PhaseOutput], None]
-
-_log = logging.getLogger(__name__)
 
 
 class Council:
@@ -40,13 +39,7 @@ class Council:
         self.agents: dict[str, Agent] = {}
         self.by_role: defaultdict[Role, list[Agent]] = defaultdict(list)
         for cfg in config.agents:
-            agent = Agent.from_config(cfg)
-            if lessons_block:
-                agent = Agent(
-                    config=agent.config,
-                    system_prompt=agent.system_prompt + "\n\n" + lessons_block,
-                    tools=agent.tools,
-                )
+            agent = Agent.from_config(cfg, lessons=lessons_block)
             self.agents[cfg.name] = agent
             self.by_role[cfg.role].append(agent)
 
@@ -96,9 +89,7 @@ class Council:
         final_answer = orchestration.messages[0].content if orchestration.messages else ""
 
         if self.config.retrospective:
-            retro_phase = await phases_mod.run_retrospective(
-                self, task, phases_run, tokens=tokens
-            )
+            retro_phase = await phases_mod.run_retrospective(self, task, phases_run, tokens=tokens)
             _emit(stream, retro_phase)
             phases_run.append(retro_phase)
             _persist_retrospective(self.config, task, retro_phase, phases_run)
@@ -126,11 +117,14 @@ def write_transcript(result: CouncilResult, path: Path | str) -> Path:
     return p
 
 
+_BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+(.+)$")
+
+
 def _extract_lessons(retro_content: str) -> list[str]:
     """Pull lessons out of the critic's retrospective message.
 
-    Preferred: JSON with `{"lessons": [...]}`. Fallback: bullet lines ('- ', '* ', digit.).
-    Returns at most 3 non-empty strings so a runaway Critic can't bloat the log.
+    Preferred: JSON with `{"lessons": [...]}`. Fallback: bullet / numbered lines.
+    Caps at 3 non-empty entries so a runaway Critic can't bloat the log.
     """
     if not retro_content.strip():
         return []
@@ -142,17 +136,9 @@ def _extract_lessons(retro_content: str) -> list[str]:
         raw = data.get("lessons")
         if isinstance(raw, list):
             return [str(x).strip() for x in raw if str(x).strip()][:3]
-    # Fallback: pick bulleted lines.
-    out: list[str] = []
-    for line in retro_content.splitlines():
-        stripped = line.strip()
-        for prefix in ("- ", "* ", "• "):
-            if stripped.startswith(prefix):
-                out.append(stripped.removeprefix(prefix).strip())
-                break
-        else:
-            if stripped[:2].rstrip(".").isdigit() and ". " in stripped:
-                out.append(stripped.split(". ", 1)[1].strip())
+    out = [
+        m.group(1).strip() for line in retro_content.splitlines() if (m := _BULLET_RE.match(line))
+    ]
     return [x for x in out if x][:3]
 
 
@@ -162,17 +148,12 @@ def _persist_retrospective(
     """Extract lessons from the retrospective phase and append a JSONL record. Failures
     are logged but never raised — persistence is side-channel; a storage hiccup must not
     fail the run."""
-    if not retro_phase.messages:
+    if not retro_phase.messages or retro_phase.messages[0].error:
         return
-    msg = retro_phase.messages[0]
-    if msg.error:
-        return
-    lessons = _extract_lessons(msg.content)
+    lessons = _extract_lessons(retro_phase.messages[0].content)
     if not lessons:
         return
-    total_cost = sum(
-        (m.cost_usd or 0.0) for ph in all_phases for m in ph.messages
-    )
+    total_cost = sum((m.cost_usd or 0.0) for ph in all_phases for m in ph.messages)
     record = retrospectives.Retrospective(
         timestamp=datetime.now(UTC),
         council_name=config.name,
@@ -184,12 +165,11 @@ def _persist_retrospective(
     try:
         retrospectives.append(record, dir_=config.retrospective_dir)
     except OSError as e:
-        _log.warning("failed to persist retrospective: %s", e)
+        logging.getLogger(__name__).warning("failed to persist retrospective: %s", e)
 
 
 def _emit(stream: PhaseStream | None, phase: PhaseOutput) -> None:
-    if stream is None:
-        return
     # A broken stream sink should not abort the run.
-    with contextlib.suppress(Exception):
-        stream(phase)
+    if stream is not None:
+        with contextlib.suppress(Exception):
+            stream(phase)

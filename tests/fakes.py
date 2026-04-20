@@ -70,7 +70,7 @@ class FakeLLM:
         if self.responder is not None:
             content = self.responder(call)
         else:
-            content = self.by_name.get(_agent_from_system(system), self.default)
+            content = self.by_name.get(agent_from_system(system), self.default)
         if isinstance(content, LLMError):
             raise content
         if stream_handler is not None:
@@ -104,22 +104,18 @@ class FakeLLM:
         return content, meta
 
 
-def _agent_from_system(system: str) -> str:
-    """Best-effort: pick the agent name out of the first line of the system prompt."""
+def agent_from_system(system: str) -> str:
+    """Best-effort: pick the agent name out of the first line of the system prompt.
+    System prompts all begin with ``You are {name}, the ...``."""
     first_line = system.strip().splitlines()[0] if system.strip() else ""
-    # system prompts all begin with "You are {name}, the ..."
     head, _, _ = first_line.partition(",")
     prefix = "You are "
     return head[len(prefix) :].strip() if head.startswith(prefix) else first_line
 
 
 def install_fake_llm(monkeypatch: Any, fake: FakeLLM) -> None:
-    """Monkeypatch `ai_agent_council.llm.complete` and `agent.llm` to call `fake.complete`."""
-    import ai_agent_council.agent as agent_mod
+    """Monkeypatch ``ai_agent_council.llm.complete``. agent.py does ``from . import llm``
+    which binds the same module object, so this one setattr is visible through both paths."""
     import ai_agent_council.llm as llm_mod
 
     monkeypatch.setattr(llm_mod, "complete", fake.complete)
-    # agent.py imports `llm` as a module reference, so we need to be sure the monkeypatched
-    # attribute is visible from there. Since agent does `from . import llm`, setattr on the
-    # llm module is sufficient — the attribute lookup goes through the module object.
-    monkeypatch.setattr(agent_mod.llm, "complete", fake.complete, raising=True)

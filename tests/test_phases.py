@@ -14,7 +14,7 @@ from ai_agent_council.phases import (
 )
 from ai_agent_council.prompts import render_divergent_prompt
 
-from .fakes import FakeCall, FakeLLM
+from .fakes import FakeCall, FakeLLM, agent_from_system
 
 
 def test_divergent_prompt_signature_is_anti_anchoring() -> None:
@@ -155,11 +155,7 @@ async def test_finishing_skipped_when_no_finisher(
 async def test_orchestrate_prompt_contains_whole_transcript(
     fake_llm: FakeLLM, minimal_council_config: CouncilConfig
 ) -> None:
-    def responder(call: FakeCall) -> str:
-        name = _name_of(call.system)
-        return f"RESPONSE_FROM_{name}"
-
-    fake_llm.responder = responder
+    fake_llm.responder = lambda call: f"RESPONSE_FROM_{agent_from_system(call.system)}"
     council = Council(minimal_council_config)
     divergent = await run_divergent(council, "task")
     critique = await run_critique(council, "task", divergent)
@@ -172,9 +168,3 @@ async def test_orchestrate_prompt_contains_whole_transcript(
     # transcript should mention each phase name
     for name in ("divergent", "critique", "synthesis"):
         assert name in prompt
-
-
-def _name_of(system: str) -> str:
-    head = system.strip().splitlines()[0]
-    _, _, rest = head.partition("You are ")
-    return rest.split(",", 1)[0].strip() or "unknown"

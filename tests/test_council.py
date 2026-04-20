@@ -6,15 +6,11 @@ from ai_agent_council.config import CouncilConfig
 from ai_agent_council.council import Council, run_council
 from ai_agent_council.models import Phase, PhaseOutput
 
-from .fakes import FakeCall, FakeLLM
+from .fakes import FakeCall, FakeLLM, agent_from_system
 
 
 def _responder_from_role(call: FakeCall) -> str:
-    head = call.system.strip().splitlines()[0]
-    # "You are Muse, the Ideator ..."
-    _, _, rest = head.partition("You are ")
-    agent_name, _, _ = rest.partition(",")
-    return f"Response from {agent_name.strip()}"
+    return f"Response from {agent_from_system(call.system)}"
 
 
 async def test_end_to_end_minimal_roster(
@@ -154,7 +150,7 @@ async def test_tokens_callback_is_driven_live(
     fake_llm: FakeLLM, minimal_council_config: CouncilConfig
 ) -> None:
     """With a `tokens` callback, each agent's content is streamed as it's produced."""
-    fake_llm.responder = lambda call: f"RESPONSE_FROM_{_name_of(call.system)}"
+    fake_llm.responder = lambda call: f"RESPONSE_FROM_{agent_from_system(call.system)}"
     received: list[tuple[str, str]] = []
 
     def on_token(agent: str, chunk: str) -> None:
@@ -170,9 +166,3 @@ async def test_tokens_callback_is_driven_live(
     assert "Muse" in by_agent
     assert by_agent["Muse"].startswith("RESPONSE_FROM_Muse")
     assert "Scribe" in by_agent  # orchestrator also streams
-
-
-def _name_of(system: str) -> str:
-    head = system.strip().splitlines()[0]
-    _, _, rest = head.partition("You are ")
-    return rest.split(",", 1)[0].strip() or "unknown"

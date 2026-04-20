@@ -28,8 +28,12 @@ class Agent:
     tools: list[Tool] = field(default_factory=list)
 
     @classmethod
-    def from_config(cls, cfg: AgentConfig) -> Self:
-        prompt = cfg.system_prompt if cfg.system_prompt else render_role_prompt(cfg.role, cfg.name)
+    def from_config(cls, cfg: AgentConfig, *, lessons: str = "") -> Self:
+        """Build an Agent. Optional `lessons` block is appended to the system prompt —
+        used by Council to inject recalled retrospective lessons."""
+        prompt = cfg.system_prompt or render_role_prompt(cfg.role, cfg.name)
+        if lessons:
+            prompt = prompt + "\n\n" + lessons
         return cls(config=cfg, system_prompt=prompt, tools=_resolve_tools(cfg.tools))
 
     async def respond(
